@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptly.local/schemas/engagement-event.schema.json",
+  "title": "Adaptly Engagement Event",
+  "description": "Shared format for one engagement analysis result during a learning session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "session_id",
+    "user_id",
+    "timestamp",
+    "state",
+    "confidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "chunk_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "focused",
+        "drifting",
+        "struggling",
+        "fatigued",
+        "recovered"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "gaze_x": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "gaze_y": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "blink_rate": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "head_pitch": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "head_yaw": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "head_roll": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "eye_openness": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "gaze_regression_detected": {
+      "type": "boolean",
+      "default": false
+    },
+    "deep_thinking_detected": {
+      "type": "boolean",
+      "default": false
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "lstm",
+        "rule",
+        "hybrid"
+      ]
+    }
+  }
+}

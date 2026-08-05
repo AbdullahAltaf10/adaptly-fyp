@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptly.local/schemas/session.schema.json",
+  "title": "Adaptly Study Session",
+  "description": "Shared format for an active or completed learning session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session_id",
+    "user_id",
+    "content_id",
+    "status",
+    "started_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "created",
+        "active",
+        "paused",
+        "completed",
+        "abandoned"
+      ]
+    },
+    "current_chunk_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "duration_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "webcam_enabled": {
+      "type": "boolean"
+    },
+    "voice_input_enabled": {
+      "type": "boolean"
+    },
+    "voice_output_enabled": {
+      "type": "boolean"
+    },
+    "intervention_count": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "assistant_message_count": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
