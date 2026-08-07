@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+python-dotenv
+pymongo
+firebase-admin
+certifi
+pypdf
+beautifulsoup4
+requests
+python-multipart
+youtube-transcript-api
+openai
+tensorflow
+scikit-learn
+pymupdfopencv-python-headless
