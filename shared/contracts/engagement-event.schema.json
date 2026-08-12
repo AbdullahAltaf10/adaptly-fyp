@@ -106,6 +106,18 @@
       ],
       "minimum": 0
     },
+    "brow_raise": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "inter_brow": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
     "gaze_regression_detected": {
       "type": "boolean",
       "default": false

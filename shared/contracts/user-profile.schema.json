@@ -2,14 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://adaptly.local/schemas/user-profile.schema.json",
   "title": "Adaptly User Profile",
-  "description": "Shared format for learner and administrator profile information.",
+  "description": "Shared format for learner and corporate profile information.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "user_id",
     "email",
-    "account_type",
+    "mode",
+    "corporate_role",
     "accessibility_settings",
     "created_at",
     "updated_at"
@@ -31,9 +32,13 @@
       "type": ["string", "null"],
       "maxLength": 100
     },
-    "account_type": {
+    "mode": {
       "type": "string",
-      "enum": ["learner", "admin", "employee", "hr_admin"]
+      "enum": ["learner", "corporate"]
+    },
+    "corporate_role": {
+      "type": ["string", "null"],
+      "enum": ["employee", "hr_admin", null]
     },
     "accessibility_settings": {
       "type": "object",
@@ -88,5 +93,40 @@
       "type": "string",
       "format": "date-time"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "learner"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "corporate_role": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "corporate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "corporate_role": {
+            "type": "string",
+            "enum": ["employee", "hr_admin"]
+          }
+        }
+      }
+    }
+  ]
 }
