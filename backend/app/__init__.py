@@ -1,0 +1,1 @@
+"""Adaptly backend application package."""
