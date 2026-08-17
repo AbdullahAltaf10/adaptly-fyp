@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This API is the Issue #17 foundation for Adaptly's Module 5 Context-Aware AI
-Assistant. It validates a learner question and its current learning context,
-then returns a deterministic local mock response.
+This API is the foundation for Adaptly's Module 5 Context-Aware AI Assistant.
+It validates a learner question and context, then returns a deterministic local
+mock response or a Gemini-generated answer, depending on backend configuration.
 
 ## Endpoint
 
@@ -62,14 +62,28 @@ previous messages to 4,000 characters, and conversation history to 20 messages.
 Unknown fields and previous-message roles other than `user` and `assistant` are
 rejected.
 
-## Mock mode
+## Assistant modes and Gemini configuration
 
-Issue #17 intentionally uses a deterministic local mock service. No Gemini API
-key, external AI call, database, or internet connection is required. Gemini
-integration belongs to Issue #18.
+`ASSISTANT_MODE` selects `mock` (the default) or `gemini` mode. Mock mode is
+deterministic, makes no external call, and requires no API key, so it is used in
+tests and offline development.
+
+Gemini mode uses the official Google Gen AI Python SDK and requires
+`GEMINI_API_KEY` in the backend environment. `GEMINI_MODEL` defaults to
+`gemini-3.6-flash`; `GEMINI_TIMEOUT_MS` defaults to 60,000 milliseconds and may
+be set between 1 and 120,000. A missing key or invalid configuration returns
+HTTP 503. A provider failure or unusable response returns HTTP 502. A timeout
+returns HTTP 504. These responses do not include provider details or secrets.
+
+The prompt gives Gemini the learner question, active learning chunk, optional
+section title, and previous messages. Core assistant instructions are separated
+from all supplied values, which are labelled untrusted data; instructions inside
+the content or conversation do not override Adaptly's learning-assistant rules.
 
 ## Privacy
 
 This endpoint does not accept raw webcam video, webcam frames, or engagement
-telemetry. In Issue #17 it does not send learning content to any external AI
-service and does not persist conversation data.
+telemetry, and it does not persist conversation data. Mock mode keeps assistant
+input local. In Gemini mode, the supplied question, active chunk, and previous
+conversation messages are sent to Google's Gemini service; no raw webcam data
+is sent.
