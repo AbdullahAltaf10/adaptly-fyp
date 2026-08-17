@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptly.local/schemas/intervention-event.schema.json",
+  "title": "Adaptly Intervention Event",
+  "description": "Shared analytics-safe format for an intervention delivered during a learning session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "intervention_id",
+    "session_id",
+    "user_id",
+    "timestamp",
+    "intervention_type",
+    "reason_code",
+    "reason",
+    "triggering_engagement_state",
+    "delivery_status",
+    "outcome",
+    "helped"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "intervention_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "chunk_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "intervention_type": {
+      "type": "string",
+      "enum": [
+        "simplify_content",
+        "bullet_summary",
+        "break_suggestion",
+        "assistant_help_prompt",
+        "other"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "drifting",
+        "struggling",
+        "fatigue",
+        "reading_difficulty",
+        "repeated_difficulty",
+        "other"
+      ]
+    },
+    "triggering_engagement_state": {
+      "type": "string",
+      "enum": [
+        "focused",
+        "drifting",
+        "struggling",
+        "fatigued",
+        "recovered",
+        "unknown"
+      ]
+    },
+    "triggering_engagement_event_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "delivery_status": {
+      "type": "string",
+      "enum": [
+        "offered",
+        "displayed",
+        "accepted",
+        "dismissed",
+        "completed",
+        "failed"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "not_observed",
+        "recovered",
+        "improved",
+        "unchanged",
+        "worsened",
+        "dismissed",
+        "unknown"
+      ]
+    },
+    "recovery_timestamp": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "recovery_duration_seconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "helped": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "policy_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
