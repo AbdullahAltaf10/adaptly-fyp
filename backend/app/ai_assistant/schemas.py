@@ -55,6 +55,46 @@ class ConversationMessage(AssistantModel):
         return value
 
 
+class ContentMetadata(AssistantModel):
+    """Optional document metadata used to ground an assistant response."""
+
+    title: Annotated[str | None, Field(default=None, max_length=300)]
+    content_type: Annotated[str | None, Field(default=None, max_length=64)]
+    language: Annotated[str | None, Field(default=None, max_length=20)]
+
+    @field_validator("title", "content_type", "language", mode="before")
+    @classmethod
+    def reject_blank_strings(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                raise ValueError("must not be blank")
+        return value
+
+
+class SessionMetadata(AssistantModel):
+    """Optional current-session metadata relevant to assistant context."""
+
+    status: Annotated[str | None, Field(default=None, max_length=50)]
+    current_chunk_id: Annotated[str | None, Field(default=None, max_length=MAX_ID_LENGTH)]
+
+    @field_validator("status", "current_chunk_id", mode="before")
+    @classmethod
+    def reject_blank_strings(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                raise ValueError("must not be blank")
+        return value
+
+
+class LearnerPreferences(AssistantModel):
+    """Optional non-sensitive preferences that can adjust explanation style."""
+
+    preferred_explanation_mode: Literal["standard", "simple", "detailed"] | None = None
+    preferred_content_mode: Literal["text", "audio", "mixed"] | None = None
+
+
 class AssistantMessageRequest(AssistantModel):
     """Validated input for one context-aware assistant message."""
 
@@ -62,6 +102,9 @@ class AssistantMessageRequest(AssistantModel):
     session_id: Annotated[str, Field(min_length=1, max_length=MAX_ID_LENGTH)]
     content_id: Annotated[str, Field(min_length=1, max_length=MAX_ID_LENGTH)]
     current_chunk: CurrentChunk
+    content_context: ContentMetadata | None = None
+    session_context: SessionMetadata | None = None
+    learner_preferences: LearnerPreferences | None = None
     previous_messages: Annotated[
         list[ConversationMessage], Field(default_factory=list, max_length=MAX_PREVIOUS_MESSAGES)
     ]
@@ -74,6 +117,34 @@ class AssistantMessageRequest(AssistantModel):
             if not value:
                 raise ValueError("must not be blank")
         return value
+
+
+class NormalizedContentContext(AssistantModel):
+    """Content metadata with the request's required content identifier."""
+
+    content_id: str
+    title: str | None = None
+    content_type: str | None = None
+    language: str | None = None
+
+
+class NormalizedSessionContext(AssistantModel):
+    """Session metadata with the request's required session identifier."""
+
+    session_id: str
+    status: str | None = None
+    current_chunk_id: str | None = None
+
+
+class AssistantContext(AssistantModel):
+    """Normalized request-scoped context supplied to the prompt builder."""
+
+    question: str
+    content: NormalizedContentContext
+    chunk: CurrentChunk
+    session: NormalizedSessionContext
+    learner_preferences: LearnerPreferences | None = None
+    conversation: list[ConversationMessage]
 
 
 class AssistantMessageResponse(AssistantModel):

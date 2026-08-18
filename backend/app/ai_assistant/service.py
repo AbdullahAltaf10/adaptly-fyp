@@ -5,6 +5,7 @@ import logging
 import re
 from typing import Any
 
+from app.ai_assistant.context import build_assistant_context
 from app.ai_assistant.prompts import build_assistant_prompt
 from app.ai_assistant.schemas import AssistantMessageRequest, AssistantMessageResponse
 from app.core.config import AssistantSettings, ConfigurationError
@@ -171,7 +172,8 @@ def create_gemini_response(
     if not settings.gemini_api_key:
         raise AssistantConfigurationError("Gemini is not configured for this server.")
 
-    prompt = build_assistant_prompt(request)
+    context = build_assistant_context(request)
+    prompt = build_assistant_prompt(context)
     try:
         client = client_factory(settings.gemini_api_key, settings.gemini_timeout_ms)
         provider_response = client.models.generate_content(

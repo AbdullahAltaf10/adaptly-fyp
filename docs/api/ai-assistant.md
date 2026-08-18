@@ -22,6 +22,18 @@ mock response or a Gemini-generated answer, depending on backend configuration.
     "text": "Gradient descent updates model parameters to reduce error.",
     "section_title": "Model Training"
   },
+  "content_context": {
+    "title": "Introduction to Machine Learning",
+    "content_type": "pdf",
+    "language": "en"
+  },
+  "session_context": {
+    "status": "active",
+    "current_chunk_id": "chunk-003"
+  },
+  "learner_preferences": {
+    "preferred_explanation_mode": "simple"
+  },
   "previous_messages": [
     {
       "role": "user",
@@ -37,6 +49,12 @@ mock response or a Gemini-generated answer, depending on backend configuration.
 
 `question`, `session_id`, `content_id`, and `current_chunk` are required.
 `current_chunk` requires `chunk_id` and `text`; `section_title` is optional.
+`content_context`, `session_context`, and `learner_preferences` are optional.
+Content context may provide `title`, `content_type`, and `language`. Session
+context may provide `status` and `current_chunk_id`. Learner preferences may
+provide `preferred_explanation_mode` (`standard`, `simple`, or `detailed`) and
+`preferred_content_mode` (`text`, `audio`, or `mixed`). These values only adjust
+the explanation style; they do not enable voice features.
 `previous_messages` is optional and defaults to an empty list. Each previous
 message must have role `user` or `assistant` and a non-empty `message`.
 
@@ -62,6 +80,23 @@ previous messages to 4,000 characters, and conversation history to 20 messages.
 Unknown fields and previous-message roles other than `user` and `assistant` are
 rejected.
 
+## Context and conversation memory
+
+Each request builds a normalized context from the required content/session IDs,
+active chunk, optional metadata, preferences, and supplied conversation history.
+The active chunk remains the detailed source context, so a question such as
+`What does this mean?` can be interpreted against the current chunk and recent
+discussion.
+
+Conversation context is request-scoped and session-scoped: no global history is
+kept and no database persistence is implemented in this issue. The prompt uses a
+deduplicated window of at most eight messages. It prioritizes recent messages,
+keeps chronological order, and retains the first learner question when it would
+otherwise be dropped by the window. Durable session memory will be added only
+when a session persistence layer exists. Until then, the client must supply only
+history from the request's `session_id`; messages do not yet carry separate
+session identifiers that the backend can verify.
+
 ## Assistant modes and Gemini configuration
 
 `ASSISTANT_MODE` selects `mock` (the default) or `gemini` mode. Mock mode is
@@ -82,8 +117,9 @@ the content or conversation do not override Adaptly's learning-assistant rules.
 
 ## Privacy
 
-This endpoint does not accept raw webcam video, webcam frames, or engagement
-telemetry, and it does not persist conversation data. Mock mode keeps assistant
-input local. In Gemini mode, the supplied question, active chunk, and previous
-conversation messages are sent to Google's Gemini service; no raw webcam data
-is sent.
+This endpoint does not accept raw webcam video, webcam frames, facial landmarks,
+or engagement telemetry, and it does not persist conversation data. Mock mode
+keeps assistant input local. In Gemini mode, only the supplied educational
+context (question, active chunk, optional metadata/preferences, and bounded
+conversation window) is sent to Google's Gemini service; no raw webcam data is
+sent.
