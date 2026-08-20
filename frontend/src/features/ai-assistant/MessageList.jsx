@@ -1,6 +1,6 @@
 import { MessageBubble } from "./MessageBubble";
 
-export function MessageList({ messages, isLoading, endRef }) {
+export function MessageList({ messages, isLoading, endRef, speechSupported, isSpeaking, onPlay, onStop }) {
   if (messages.length === 0) {
     return (
       <div className="assistant-empty-state">
@@ -13,7 +13,15 @@ export function MessageList({ messages, isLoading, endRef }) {
   return (
     <div className="message-list" aria-label="Assistant conversation">
       {messages.map((message) => (
-        <MessageBubble key={message.id} role={message.role} content={message.content} />
+        <MessageBubble
+          key={message.id}
+          role={message.role}
+          content={message.content}
+          speechSupported={speechSupported}
+          isSpeaking={isSpeaking}
+          onPlay={onPlay}
+          onStop={onStop}
+        />
       ))}
       {isLoading && (
         <p className="assistant-thinking" role="status">

@@ -5,6 +5,9 @@ import { demoStudyContext } from "./demoStudyContext";
 import { MessageList } from "./MessageList";
 import { QuestionInput } from "./QuestionInput";
 import { SuggestedQuestions } from "./SuggestedQuestions";
+import { useSpeechRecognition } from "./useSpeechRecognition";
+import { useSpeechSynthesis } from "./useSpeechSynthesis";
+import { VoiceInputButton } from "./VoiceInputButton";
 import "./assistant.css";
 
 const safeErrorMessage = "I couldn't get a response right now. Please try again.";
@@ -19,8 +22,11 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [failedRequest, setFailedRequest] = useState(null);
+  const [voiceResponsesEnabled, setVoiceResponsesEnabled] = useState(false);
   const nextMessageId = useRef(1);
   const endRef = useRef(null);
+  const speech = useSpeechSynthesis();
+  const recognition = useSpeechRecognition({ onFinalTranscript: setInput });
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "end" });
@@ -53,6 +59,7 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
         ...currentMessages,
         { id: nextMessageId.current++, role: "assistant", content: result.answer },
       ]);
+      if (voiceResponsesEnabled) speech.speak(result.answer);
     } catch {
       setError(safeErrorMessage);
       setFailedRequest({ question: trimmedQuestion, previousMessages: priorMessages });
@@ -74,9 +81,27 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
           <h1 id="assistant-title">Adaptly Assistant</h1>
           <p>Support for the section you&apos;re studying.</p>
         </div>
+        {speech.isSupported && (
+          <label className="voice-toggle">
+            <input
+              type="checkbox"
+              checked={voiceResponsesEnabled}
+              onChange={(event) => setVoiceResponsesEnabled(event.target.checked)}
+            />
+            Voice responses
+          </label>
+        )}
       </header>
       <div className="assistant-panel__messages">
-        <MessageList messages={messages} isLoading={isLoading} endRef={endRef} />
+        <MessageList
+          messages={messages}
+          isLoading={isLoading}
+          endRef={endRef}
+          speechSupported={speech.isSupported}
+          isSpeaking={speech.isSpeaking}
+          onPlay={speech.speak}
+          onStop={speech.stop}
+        />
       </div>
       <SuggestedQuestions onSelect={setInput} disabled={isLoading} />
       {error && (
@@ -92,6 +117,17 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
         onChange={setInput}
         onSubmit={() => submitQuestion(input)}
         disabled={isLoading}
+        voiceControl={(
+          <VoiceInputButton
+            isSupported={recognition.isSupported}
+            isListening={recognition.isListening}
+            interimTranscript={recognition.interimTranscript}
+            error={recognition.recognitionError}
+            onStart={recognition.startListening}
+            onStop={recognition.stopListening}
+            disabled={isLoading}
+          />
+        )}
       />
     </section>
   );

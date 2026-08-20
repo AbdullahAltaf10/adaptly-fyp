@@ -1,4 +1,4 @@
-export function QuestionInput({ value, onChange, onSubmit, disabled }) {
+export function QuestionInput({ value, onChange, onSubmit, disabled, voiceControl }) {
   function handleKeyDown(event) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -21,6 +21,7 @@ export function QuestionInput({ value, onChange, onSubmit, disabled }) {
       <button type="submit" disabled={disabled || !value.trim()}>
         Send
       </button>
+      {voiceControl && <div className="question-input__voice">{voiceControl}</div>}
     </form>
   );
 }
