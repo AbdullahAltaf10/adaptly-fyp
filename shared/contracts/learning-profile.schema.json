@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptly.local/schemas/learning-profile.schema.json",
+  "title": "Adaptly Learning Analytics Profile",
+  "description": "Shared format for versioned learning patterns derived across multiple sessions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "metric_version",
+    "user_id",
+    "sessions_analyzed",
+    "analysis_date_range",
+    "average_session_duration_seconds",
+    "average_focus_percentage",
+    "focus_trend",
+    "recovery_trend",
+    "intervention_effectiveness_by_type",
+    "assistant_usage_patterns",
+    "recurring_difficulty_areas",
+    "effective_support_methods",
+    "critical_section_aggregates",
+    "data_quality",
+    "computed_at"
+  ],
+  "$defs": {
+    "trend": {
+      "type": "string",
+      "enum": [
+        "improving",
+        "stable",
+        "declining",
+        "insufficient_data"
+      ]
+    },
+    "intervention_type": {
+      "type": "string",
+      "enum": [
+        "simplify_content",
+        "bullet_summary",
+        "break_suggestion",
+        "assistant_help_prompt",
+        "other"
+      ]
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "metric_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sessions_analyzed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "analysis_date_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "started_at",
+        "ended_at"
+      ],
+      "properties": {
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "ended_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "average_session_duration_seconds": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "average_focus_percentage": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "focus_trend": {
+      "$ref": "#/$defs/trend"
+    },
+    "recovery_trend": {
+      "$ref": "#/$defs/trend"
+    },
+    "intervention_effectiveness_by_type": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "intervention_type",
+          "total_count",
+          "effective_count",
+          "ineffective_count",
+          "unknown_outcome_count",
+          "effectiveness_rate"
+        ],
+        "properties": {
+          "intervention_type": {
+            "$ref": "#/$defs/intervention_type"
+          },
+          "total_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "effective_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ineffective_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unknown_outcome_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "effectiveness_rate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "assistant_usage_patterns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessions_with_assistant_use",
+        "average_learner_messages_per_session",
+        "typed_input_count",
+        "voice_input_count",
+        "suggested_question_count",
+        "preferred_input_mode"
+      ],
+      "properties": {
+        "sessions_with_assistant_use": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "average_learner_messages_per_session": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "typed_input_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "voice_input_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suggested_question_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "preferred_input_mode": {
+          "type": "string",
+          "enum": [
+            "typed",
+            "voice",
+            "suggested_question",
+            "mixed",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "recurring_difficulty_areas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "area_key",
+          "label",
+          "session_count",
+          "occurrence_count"
+        ],
+        "properties": {
+          "area_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "content_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "chunk_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "occurrence_count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "effective_support_methods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "intervention_type",
+          "times_used",
+          "effective_count",
+          "effectiveness_rate"
+        ],
+        "properties": {
+          "intervention_type": {
+            "$ref": "#/$defs/intervention_type"
+          },
+          "times_used": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "effective_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "effectiveness_rate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "critical_section_aggregates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sections_observed",
+        "sessions_with_critical_sections",
+        "average_engagement_rate",
+        "average_focus_percentage"
+      ],
+      "properties": {
+        "sections_observed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sessions_with_critical_sections": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "average_engagement_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "average_focus_percentage": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "data_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessions_with_sufficient_data",
+        "average_event_coverage_rate",
+        "flags"
+      ],
+      "properties": {
+        "sessions_with_sufficient_data": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "average_event_coverage_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "flags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "insufficient_sessions",
+              "sparse_engagement",
+              "inconsistent_metric_versions",
+              "missing_intervention_outcomes",
+              "incomplete_assistant_metadata",
+              "insufficient_critical_section_data"
+            ]
+          }
+        }
+      }
+    },
+    "computed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

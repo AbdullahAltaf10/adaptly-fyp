@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptly.local/schemas/assistant-event.schema.json",
+  "title": "Adaptly Assistant Event",
+  "description": "Shared analytics-safe metadata for one learner or assistant interaction without chat text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "session_id",
+    "user_id",
+    "timestamp",
+    "direction",
+    "input_mode",
+    "response_mode",
+    "intent",
+    "learner_signal",
+    "suggested_question_used",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "chunk_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "learner",
+        "assistant"
+      ]
+    },
+    "input_mode": {
+      "type": "string",
+      "enum": [
+        "typed",
+        "voice",
+        "suggested_question",
+        "not_applicable"
+      ]
+    },
+    "response_mode": {
+      "type": "string",
+      "enum": [
+        "text",
+        "voice",
+        "mixed",
+        "not_applicable"
+      ]
+    },
+    "intent": {
+      "type": "string",
+      "enum": [
+        "clarification",
+        "definition",
+        "example",
+        "simplification",
+        "summary",
+        "navigation",
+        "general_question",
+        "other",
+        "unknown"
+      ]
+    },
+    "learner_signal": {
+      "type": "string",
+      "enum": [
+        "neutral",
+        "confusion",
+        "frustration",
+        "unknown"
+      ]
+    },
+    "suggested_question_used": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "error"
+      ]
+    },
+    "error_code": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 100
+    },
+    "model_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
