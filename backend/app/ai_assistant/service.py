@@ -7,7 +7,12 @@ from typing import Any
 
 from app.ai_assistant.context import build_assistant_context
 from app.ai_assistant.prompts import build_assistant_prompt
-from app.ai_assistant.schemas import AssistantMessageRequest, AssistantMessageResponse
+from app.ai_assistant.schemas import (
+    AssistantMessageRequest,
+    AssistantMessageResponse,
+    EmotionSignal,
+)
+from app.ai_assistant.signals import classify_conversational_signal
 from app.core.config import AssistantSettings, ConfigurationError
 
 
@@ -72,6 +77,7 @@ def create_mock_response(request: AssistantMessageRequest) -> AssistantMessageRe
 
     return AssistantMessageResponse(
         answer=answer,
+        emotion_signal=classify_conversational_signal(request.question),
         used_context=True,
         response_mode="text",
         session_id=request.session_id,
@@ -80,10 +86,15 @@ def create_mock_response(request: AssistantMessageRequest) -> AssistantMessageRe
     )
 
 
-def _create_response(request: AssistantMessageRequest, answer: str) -> AssistantMessageResponse:
+def _create_response(
+    request: AssistantMessageRequest,
+    answer: str,
+    emotion_signal: EmotionSignal,
+) -> AssistantMessageResponse:
     """Preserve the stable Issue #17 response envelope for both modes."""
     return AssistantMessageResponse(
         answer=answer,
+        emotion_signal=emotion_signal,
         used_context=True,
         response_mode="text",
         session_id=request.session_id,
@@ -172,7 +183,8 @@ def create_gemini_response(
     if not settings.gemini_api_key:
         raise AssistantConfigurationError("Gemini is not configured for this server.")
 
-    context = build_assistant_context(request)
+    emotion_signal = classify_conversational_signal(request.question)
+    context = build_assistant_context(request, emotion_signal=emotion_signal)
     prompt = build_assistant_prompt(context)
     try:
         client = client_factory(settings.gemini_api_key, settings.gemini_timeout_ms)
@@ -190,7 +202,7 @@ def create_gemini_response(
             raise AssistantProviderTimeoutError("The assistant provider timed out.") from error
         raise AssistantProviderError("The assistant provider is unavailable.") from error
 
-    return _create_response(request, answer)
+    return _create_response(request, answer, emotion_signal)
 
 
 def create_assistant_response(

@@ -11,6 +11,7 @@ MAX_CHUNK_TEXT_LENGTH = 12_000
 MAX_SECTION_TITLE_LENGTH = 300
 MAX_PREVIOUS_MESSAGES = 20
 MAX_MESSAGE_LENGTH = 4_000
+EmotionSignal = Literal["neutral", "confusion", "frustration"]
 
 
 class AssistantModel(BaseModel):
@@ -145,12 +146,14 @@ class AssistantContext(AssistantModel):
     session: NormalizedSessionContext
     learner_preferences: LearnerPreferences | None = None
     conversation: list[ConversationMessage]
+    emotion_signal: EmotionSignal = "neutral"
 
 
 class AssistantMessageResponse(AssistantModel):
     """Stable Issue #17 response returned by the deterministic mock service."""
 
     answer: str
+    emotion_signal: EmotionSignal
     used_context: bool
     response_mode: Literal["text"]
     session_id: str

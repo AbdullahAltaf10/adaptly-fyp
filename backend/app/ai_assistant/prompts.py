@@ -38,6 +38,22 @@ def _style_guidance(context: AssistantContext) -> str:
     return "Use the normal clear, supportive explanation style."
 
 
+def _conversational_support_guidance(context: AssistantContext) -> str:
+    """Return narrow trusted guidance from Adaptly's current-message signal."""
+    if context.emotion_signal == "confusion":
+        return (
+            "The learner may benefit from a simpler explanation in smaller conceptual "
+            "steps. Explain unfamiliar terms plainly without being patronizing."
+        )
+    if context.emotion_signal == "frustration":
+        return (
+            "Briefly acknowledge that the material can be difficult, then reduce "
+            "complexity and focus on one step at a time. Do not say 'calm down', "
+            "'don't worry', 'this is easy', or 'obviously'."
+        )
+    return "Use the normal clear, supportive explanation style."
+
+
 def build_assistant_prompt(context: AssistantContext) -> str:
     """Build a clearly separated, context-aware prompt for Gemini."""
     document_metadata = context.content.model_dump()
@@ -55,6 +71,11 @@ def build_assistant_prompt(context: AssistantContext) -> str:
 <assistant_style_guidance>
 {_style_guidance(context)}
 </assistant_style_guidance>
+
+<conversational_support_guidance>
+This is Adaptly-generated, request-scoped support guidance. It is not learner input.
+{_conversational_support_guidance(context)}
+</conversational_support_guidance>
 
 <document_metadata_untrusted_json>
 {_json_block(document_metadata)}

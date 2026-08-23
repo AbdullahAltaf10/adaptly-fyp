@@ -66,6 +66,7 @@ def test_valid_request_returns_structured_mock_response() -> None:
             "Mock assistant response for chunk 'chunk-003' in the 'Model Training' "
             "section. Your question was received with the current learning context."
         ),
+        "emotion_signal": "neutral",
         "used_context": True,
         "response_mode": "text",
         "session_id": "session-001",
@@ -137,6 +138,14 @@ def test_endpoint_is_in_openapi_schema() -> None:
 
     assert openapi.status_code == 200
     assert "post" in openapi.json()["paths"][ENDPOINT]
+    response_properties = openapi.json()["components"]["schemas"][
+        "AssistantMessageResponse"
+    ]["properties"]
+    assert response_properties["emotion_signal"]["enum"] == [
+        "neutral",
+        "confusion",
+        "frustration",
+    ]
 
 
 class FakeGeminiResponse:
@@ -168,6 +177,7 @@ def test_real_mode_uses_gemini_client_and_returns_generated_text(monkeypatch) ->
 
     assert response.status_code == 200
     assert response.json()["answer"] == FakeGeminiResponse.text
+    assert response.json()["emotion_signal"] == "neutral"
     assert fake_client.calls[0]["model"] == "test-model"
 
 

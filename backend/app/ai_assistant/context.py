@@ -6,6 +6,7 @@ from app.ai_assistant.schemas import (
     AssistantContext,
     AssistantMessageRequest,
     ConversationMessage,
+    EmotionSignal,
     NormalizedContentContext,
     NormalizedSessionContext,
 )
@@ -48,7 +49,10 @@ def select_conversation_history(
     return recent_messages
 
 
-def build_assistant_context(request: AssistantMessageRequest) -> AssistantContext:
+def build_assistant_context(
+    request: AssistantMessageRequest,
+    emotion_signal: EmotionSignal = "neutral",
+) -> AssistantContext:
     """Normalize available request data into one prompt-ready context object."""
     content_metadata = request.content_context
     session_metadata = request.session_context
@@ -75,4 +79,5 @@ def build_assistant_context(request: AssistantMessageRequest) -> AssistantContex
             else None
         ),
         conversation=select_conversation_history(request.previous_messages),
+        emotion_signal=emotion_signal,
     )

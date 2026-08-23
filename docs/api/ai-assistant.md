@@ -63,6 +63,7 @@ message must have role `user` or `assistant` and a non-empty `message`.
 ```json
 {
   "answer": "Mock assistant response for chunk 'chunk-003' in the 'Model Training' section. Your question was received with the current learning context.",
+  "emotion_signal": "neutral",
   "used_context": true,
   "response_mode": "text",
   "session_id": "session-001",
@@ -70,6 +71,13 @@ message must have role `user` or `assistant` and a non-empty `message`.
   "chunk_id": "chunk-003"
 }
 ```
+
+`emotion_signal` is always one of `neutral`, `confusion`, or `frustration`.
+It is a lightweight conversational support signal derived only from the current
+learner message, not a clinical or psychological assessment. The signal is
+request-scoped: it is not persisted, accumulated into a profile, or inferred
+from webcam, voice, biometric, or engagement data. It is exposed for a future
+Module 6 integration; this API does not make interventions from it.
 
 ## Validation
 
@@ -111,7 +119,10 @@ HTTP 503. A provider failure or unusable response returns HTTP 502. A timeout
 returns HTTP 504. These responses do not include provider details or secrets.
 
 The prompt gives Gemini the learner question, active learning chunk, optional
-section title, and previous messages. Core assistant instructions are separated
+section title, and previous messages. Adaptly uses the local conversational
+support signal to request simpler steps for confusion or a brief respectful
+acknowledgement and one-step-at-a-time guidance for frustration. It makes no
+second Gemini call to derive this signal. Core assistant instructions are separated
 from all supplied values, which are labelled untrusted data; instructions inside
 the content or conversation do not override Adaptly's learning-assistant rules.
 
