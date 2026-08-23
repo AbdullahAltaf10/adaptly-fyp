@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { sendAssistantMessage } from "./assistantApi";
-import { demoStudyContext } from "./demoStudyContext";
+import { fallbackStudyContext, fallbackSuggestedQuestions } from "./demoStudyContext";
 import { MessageList } from "./MessageList";
 import { QuestionInput } from "./QuestionInput";
 import { SuggestedQuestions } from "./SuggestedQuestions";
@@ -16,8 +16,9 @@ function messageForHistory(message) {
   return { role: message.role, message: message.content };
 }
 
-export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext = demoStudyContext }) {
+export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext = fallbackStudyContext }) {
   const [messages, setMessages] = useState([]);
+  const [suggestedQuestions, setSuggestedQuestions] = useState(fallbackSuggestedQuestions);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -25,6 +26,7 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
   const [voiceResponsesEnabled, setVoiceResponsesEnabled] = useState(false);
   const nextMessageId = useRef(1);
   const endRef = useRef(null);
+  const previousSessionId = useRef(studyContext.session_id);
   const speech = useSpeechSynthesis();
   const recognition = useSpeechRecognition({ onFinalTranscript: setInput });
 
@@ -32,7 +34,28 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
     endRef.current?.scrollIntoView?.({ block: "end" });
   }, [messages, isLoading, error]);
 
-  async function submitQuestion(question, appendUserMessage = true, historyOverride = null) {
+  useEffect(() => {
+    if (previousSessionId.current !== studyContext.session_id) {
+      setMessages([]);
+      setError("");
+      setFailedRequest(null);
+    }
+    previousSessionId.current = studyContext.session_id;
+    setSuggestedQuestions(fallbackSuggestedQuestions);
+  }, [
+    studyContext.session_id,
+    studyContext.content_id,
+    studyContext.current_chunk.chunk_id,
+    studyContext.current_chunk.text,
+    studyContext.current_chunk.section_title,
+  ]);
+
+  async function submitQuestion(
+    question,
+    appendUserMessage = true,
+    historyOverride = null,
+    requestContext = studyContext,
+  ) {
     const trimmedQuestion = question.trim();
     if (!trimmedQuestion || isLoading) return;
 
@@ -51,7 +74,7 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
 
     try {
       const result = await apiClient({
-        ...studyContext,
+        ...requestContext,
         question: trimmedQuestion,
         previous_messages: priorMessages,
       });
@@ -59,10 +82,15 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
         ...currentMessages,
         { id: nextMessageId.current++, role: "assistant", content: result.answer },
       ]);
+      setSuggestedQuestions(result.suggested_questions || fallbackSuggestedQuestions);
       if (voiceResponsesEnabled) speech.speak(result.answer);
     } catch {
       setError(safeErrorMessage);
-      setFailedRequest({ question: trimmedQuestion, previousMessages: priorMessages });
+      setFailedRequest({
+        question: trimmedQuestion,
+        previousMessages: priorMessages,
+        requestContext,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -70,7 +98,12 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
 
   function retryFailedQuestion() {
     if (failedRequest) {
-      submitQuestion(failedRequest.question, false, failedRequest.previousMessages);
+      submitQuestion(
+        failedRequest.question,
+        false,
+        failedRequest.previousMessages,
+        failedRequest.requestContext,
+      );
     }
   }
 
@@ -103,7 +136,7 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
           onStop={speech.stop}
         />
       </div>
-      <SuggestedQuestions onSelect={setInput} disabled={isLoading} />
+      <SuggestedQuestions questions={suggestedQuestions} onSelect={setInput} disabled={isLoading} />
       {error && (
         <div className="assistant-error" role="alert">
           <span>{error}</span>

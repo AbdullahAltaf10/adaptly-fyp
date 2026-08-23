@@ -48,7 +48,8 @@ describe("AssistantPanel voice interaction", () => {
   it("shows the microphone control and inserts a final transcript", async () => {
     installSpeechRecognition();
     const user = userEvent.setup();
-    render(<AssistantPanel apiClient={vi.fn()} />);
+    const apiClient = vi.fn().mockResolvedValue({ answer: "A spoken-path answer." });
+    render(<AssistantPanel apiClient={apiClient} />);
 
     await user.click(screen.getByRole("button", { name: "Speak your question" }));
     expect(screen.getByRole("button", { name: "Stop listening" })).toBeInTheDocument();
@@ -61,6 +62,10 @@ describe("AssistantPanel voice interaction", () => {
     });
 
     expect(screen.getByLabelText("Ask Adaptly a question")).toHaveValue("Explain gradient descent simply");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("A spoken-path answer.");
+    expect(apiClient.mock.calls[0][0].question).toBe("Explain gradient descent simply");
+    expect(apiClient.mock.calls[0][0].previous_messages).toEqual([]);
   });
 
   it("keeps typed chat usable after a recognition error", async () => {

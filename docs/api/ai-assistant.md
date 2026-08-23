@@ -63,6 +63,11 @@ message must have role `user` or `assistant` and a non-empty `message`.
 ```json
 {
   "answer": "Mock assistant response for chunk 'chunk-003' in the 'Model Training' section. Your question was received with the current learning context.",
+  "suggested_questions": [
+    "Can you explain Model Training more simply?",
+    "Can you give me an example of Model Training?",
+    "Why is Model Training important?"
+  ],
   "emotion_signal": "neutral",
   "used_context": true,
   "response_mode": "text",
@@ -71,6 +76,11 @@ message must have role `user` or `assistant` and a non-empty `message`.
   "chunk_id": "chunk-003"
 }
 ```
+
+`suggested_questions` always contains three concise follow-up questions. They
+are generated locally from the active chunk's section title in both mock and
+Gemini modes, so no second Gemini request is made. A client should replace its
+previous suggestions with these response values after a successful answer.
 
 `emotion_signal` is always one of `neutral`, `confusion`, or `frustration`.
 It is a lightweight conversational support signal derived only from the current
@@ -105,6 +115,12 @@ when a session persistence layer exists. Until then, the client must supply only
 history from the request's `session_id`; messages do not yet carry separate
 session identifiers that the backend can verify.
 
+For each new request, `previous_messages` must contain only earlier completed
+learner/assistant exchanges. The current learner question is sent only in
+`question`. When a learner changes section, the client must send the new
+`current_chunk` on the next request; earlier conversation can remain for the
+same session but does not replace the active chunk.
+
 ## Assistant modes and Gemini configuration
 
 `ASSISTANT_MODE` selects `mock` (the default) or `gemini` mode. Mock mode is
@@ -117,6 +133,9 @@ Gemini mode uses the official Google Gen AI Python SDK and requires
 be set between 1 and 120,000. A missing key or invalid configuration returns
 HTTP 503. A provider failure or unusable response returns HTTP 502. A timeout
 returns HTTP 504. These responses do not include provider details or secrets.
+The frontend maps these and network/malformed-response failures to a generic
+retryable availability message; it never exposes backend configuration or
+provider details.
 
 The prompt gives Gemini the learner question, active learning chunk, optional
 section title, and previous messages. Adaptly uses the local conversational
@@ -125,6 +144,11 @@ acknowledgement and one-step-at-a-time guidance for frustration. It makes no
 second Gemini call to derive this signal. Core assistant instructions are separated
 from all supplied values, which are labelled untrusted data; instructions inside
 the content or conversation do not override Adaptly's learning-assistant rules.
+
+The browser calls this FastAPI endpoint only; it never calls Gemini directly.
+Browser speech recognition produces editable text that follows the same request
+path as typed input. Browser speech synthesis can optionally read the returned
+answer aloud, but no microphone audio is uploaded or sent to Gemini.
 
 ## Privacy
 

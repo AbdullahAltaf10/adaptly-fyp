@@ -26,13 +26,28 @@ cd backend
 python3 -m uvicorn app.main:app --reload
 ```
 
-The frontend calls `POST /api/v1/assistant/messages`. It derives
-`previous_messages` from visible learner/assistant messages and never calls
-Gemini directly. Gemini credentials must remain in the backend environment.
+The frontend calls `POST /api/v1/assistant/messages`. Every request passes the
+current `session_id`, `content_id`, `current_chunk`, learner question, and only
+completed learner/assistant messages as `previous_messages`. It never calls
+Gemini directly; Gemini credentials must remain in the backend environment.
 
-Suggested questions populate the input for learner review before sending. The
-demo context lives in `src/features/ai-assistant/demoStudyContext.js` and must
-be replaced by real study-session data when upstream modules are integrated.
+After a successful API response, the panel renders the backend-provided three
+`suggested_questions`; clicking one populates the regular input for review and
+sending through the same request path. The backend is also the source of the
+request-scoped `emotion_signal`; it is not shown as a learner label.
+
+`AssistantPanel` accepts a `studyContext` prop as the integration boundary for
+the active session/content/chunk. This standalone frontend currently passes the
+clearly isolated fallback in `src/features/ai-assistant/demoStudyContext.js`
+because no upstream study-session provider exists yet. Replace that App-level
+fallback with real active context when Modules 1–2/session UI are integrated;
+do not generate a new session ID per message. Switching sections supplies a
+new current chunk on the next request. A session change clears local visible
+conversation to prevent cross-session history mixing.
+
+If the backend is unavailable, returns a provider/configuration error, or
+returns malformed data, the panel keeps visible conversation intact, shows a
+safe retry action, and never exposes provider internals.
 
 ## Voice interaction
 

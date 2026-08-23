@@ -1,4 +1,7 @@
-export const demoStudyContext = {
+// Temporary standalone fallback until the study-session/content modules provide
+// active context to App. AssistantPanel accepts `studyContext` from that future
+// integration boundary and does not generate IDs itself.
+export const fallbackStudyContext = {
   session_id: "demo-session-001",
   content_id: "demo-content-001",
   current_chunk: {
@@ -19,3 +22,9 @@ export const demoStudyContext = {
     preferred_explanation_mode: "simple",
   },
 };
+
+export const fallbackSuggestedQuestions = [
+  "Can you explain this more simply?",
+  "Can you give me an example?",
+  "Why is this important?",
+];

@@ -13,6 +13,7 @@ from app.ai_assistant.schemas import (
     EmotionSignal,
 )
 from app.ai_assistant.signals import classify_conversational_signal
+from app.ai_assistant.suggestions import generate_suggested_questions
 from app.core.config import AssistantSettings, ConfigurationError
 
 
@@ -77,6 +78,7 @@ def create_mock_response(request: AssistantMessageRequest) -> AssistantMessageRe
 
     return AssistantMessageResponse(
         answer=answer,
+        suggested_questions=generate_suggested_questions(request),
         emotion_signal=classify_conversational_signal(request.question),
         used_context=True,
         response_mode="text",
@@ -94,6 +96,7 @@ def _create_response(
     """Preserve the stable Issue #17 response envelope for both modes."""
     return AssistantMessageResponse(
         answer=answer,
+        suggested_questions=generate_suggested_questions(request),
         emotion_signal=emotion_signal,
         used_context=True,
         response_mode="text",

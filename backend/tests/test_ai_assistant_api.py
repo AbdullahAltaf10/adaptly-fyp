@@ -18,6 +18,14 @@ client = TestClient(app)
 ENDPOINT = "/api/v1/assistant/messages"
 
 
+def expected_suggestions(topic: str) -> list[str]:
+    return [
+        f"Can you explain {topic} more simply?",
+        f"Can you give me an example of {topic}?",
+        f"Why is {topic} important?",
+    ]
+
+
 @pytest.fixture(autouse=True)
 def default_to_mock_mode(monkeypatch) -> None:
     """Ensure ordinary endpoint tests cannot use a real provider."""
@@ -66,6 +74,7 @@ def test_valid_request_returns_structured_mock_response() -> None:
             "Mock assistant response for chunk 'chunk-003' in the 'Model Training' "
             "section. Your question was received with the current learning context."
         ),
+        "suggested_questions": expected_suggestions("Model Training"),
         "emotion_signal": "neutral",
         "used_context": True,
         "response_mode": "text",
@@ -146,6 +155,8 @@ def test_endpoint_is_in_openapi_schema() -> None:
         "confusion",
         "frustration",
     ]
+    assert response_properties["suggested_questions"]["minItems"] == 3
+    assert response_properties["suggested_questions"]["maxItems"] == 3
 
 
 class FakeGeminiResponse:
@@ -177,8 +188,45 @@ def test_real_mode_uses_gemini_client_and_returns_generated_text(monkeypatch) ->
 
     assert response.status_code == 200
     assert response.json()["answer"] == FakeGeminiResponse.text
+    assert response.json()["suggested_questions"] == expected_suggestions("Model Training")
     assert response.json()["emotion_signal"] == "neutral"
     assert fake_client.calls[0]["model"] == "test-model"
+    prompt = fake_client.calls[0]["contents"]
+    assert '"session_id": "session-001"' in prompt
+    assert '"content_id": "content-001"' in prompt
+    assert "Gradient descent updates model parameters to reduce error." in prompt
+    assert "What is a neural network?" in prompt
+
+
+def test_context_switch_uses_the_new_active_chunk() -> None:
+    first_payload = valid_payload()
+    first_payload["current_chunk"] = {
+        "chunk_id": "chunk-gradient-descent",
+        "section_title": "Gradient Descent",
+        "text": "Gradient descent reduces loss.",
+    }
+    first_response = client.post(ENDPOINT, json=first_payload)
+    assert first_response.status_code == 200
+    assert first_response.json()["chunk_id"] == "chunk-gradient-descent"
+
+    second_payload = valid_payload()
+    second_payload["question"] = "What is this?"
+    second_payload["current_chunk"] = {
+        "chunk_id": "chunk-neural-networks",
+        "section_title": "Neural Networks",
+        "text": "Neural networks are layered learning models.",
+    }
+    second_payload["previous_messages"] = [
+        {"role": "user", "message": "Explain this simply."},
+        {"role": "assistant", "message": "Gradient descent reduces loss."},
+    ]
+    second_response = client.post(ENDPOINT, json=second_payload)
+
+    assert second_response.status_code == 200
+    assert second_response.json()["session_id"] == "session-001"
+    assert second_response.json()["content_id"] == "content-001"
+    assert second_response.json()["chunk_id"] == "chunk-neural-networks"
+    assert second_response.json()["suggested_questions"] == expected_suggestions("Neural Networks")
 
 
 def test_missing_key_in_real_mode_returns_safe_error(monkeypatch) -> None:

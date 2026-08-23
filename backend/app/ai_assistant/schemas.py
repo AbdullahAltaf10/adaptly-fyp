@@ -11,6 +11,8 @@ MAX_CHUNK_TEXT_LENGTH = 12_000
 MAX_SECTION_TITLE_LENGTH = 300
 MAX_PREVIOUS_MESSAGES = 20
 MAX_MESSAGE_LENGTH = 4_000
+MAX_SUGGESTED_QUESTION_LENGTH = 300
+SUGGESTED_QUESTION_COUNT = 3
 EmotionSignal = Literal["neutral", "confusion", "frustration"]
 
 
@@ -153,6 +155,10 @@ class AssistantMessageResponse(AssistantModel):
     """Stable Issue #17 response returned by the deterministic mock service."""
 
     answer: str
+    suggested_questions: Annotated[
+        list[Annotated[str, Field(min_length=1, max_length=MAX_SUGGESTED_QUESTION_LENGTH)]],
+        Field(min_length=SUGGESTED_QUESTION_COUNT, max_length=SUGGESTED_QUESTION_COUNT),
+    ]
     emotion_signal: EmotionSignal
     used_context: bool
     response_mode: Literal["text"]
