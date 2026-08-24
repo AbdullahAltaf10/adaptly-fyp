@@ -1,0 +1,45 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
+
+# --- Node ---
+node_modules/
+dist/
+build/
+.vite/
+
+# --- Secrets: never commit these ---
+.env
+.env.local
+*.env
+!.env.example
+**/firebase-service-account.json
+*service-account*.json
+*credentials*.json
+*.pem
+*.key
+
+# --- ML artifacts that are too large or regenerable ---
+*.ckpt
+mlruns/
+
+# --- Uploaded / temporary user data ---
+uploads/
+tmp/
+temp/
+
+# --- OS and editors ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
