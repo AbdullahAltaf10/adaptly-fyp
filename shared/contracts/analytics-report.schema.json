@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptly.local/schemas/analytics-report.schema.json",
+  "title": "Adaptly Analytics Insight Report",
+  "description": "Shared format for the post-session insight report and its generation status.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_id",
+    "session_id",
+    "user_id",
+    "status",
+    "report_text",
+    "generation_method",
+    "model_name",
+    "model_version",
+    "generated_at",
+    "fallback_used",
+    "retry_count"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "generated",
+        "fallback_generated",
+        "failed"
+      ]
+    },
+    "report_text": {
+      "description": "Encouraging post-session insight of approximately 150 words when generation succeeds.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "generation_method": {
+      "type": "string",
+      "enum": [
+        "gemini",
+        "deterministic_fallback",
+        "none"
+      ]
+    },
+    "model_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generated_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "fallback_used": {
+      "type": "boolean"
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_attempted_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "error_code": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 100
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "generated"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "report_text": {
+            "type": "string"
+          },
+          "generation_method": {
+            "const": "gemini"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fallback_used": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "fallback_generated"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "report_text": {
+            "type": "string"
+          },
+          "generation_method": {
+            "const": "deterministic_fallback"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fallback_used": {
+            "const": true
+          }
+        }
+      }
+    }
+  ]
+}
