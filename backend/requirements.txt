@@ -1,0 +1,41 @@
+# Adaptly backend dependencies
+# Python 3.12 required (developed and tested on 3.12.3)
+#
+# Install:  pip install -r requirements.txt
+# Versions are pinned with >= on a known-good release: reproducible enough for
+# the team while still allowing patch updates.
+
+# --- Web framework ---
+fastapi>=0.139.0
+uvicorn>=0.51.0
+python-multipart>=0.0.32          # required for FastAPI form/file uploads
+
+# --- Configuration ---
+python-dotenv>=1.2.2
+
+# --- Database ---
+pymongo>=4.17.0
+certifi>=2026.6.17                # REQUIRED for MongoDB Atlas TLS on Windows.
+                                  # Without tlsCAFile=certifi.where(), writes
+                                  # silently fail to appear in Atlas.
+
+# --- Authentication ---
+firebase-admin>=7.5.0
+
+# --- Content processing ---
+pypdf>=6.14.2                     # standard PDF text extraction
+pymupdf>=1.28.0                   # column-aware research-paper extraction (imports as "fitz")
+beautifulsoup4>=4.15.0            # website article extraction
+requests>=2.34.2
+youtube-transcript-api>=1.2.4     # captions only; does not transcribe audio
+openai>=2.45.0                    # uploaded-video transcription; inactive without OPENAI_API_KEY
+
+# --- Machine learning / computer vision ---
+tensorflow>=2.21.0                # loads the trained LSTM engagement model
+scikit-learn>=1.9.0               # loads scaler_9f.pkl. A version mismatch against
+                                  # the training environment raises
+                                  # InconsistentVersionWarning; keep this aligned
+                                  # with whatever trained the scaler.
+numpy>=2.5.1
+opencv-python-headless>=5.0.0.93  # solvePnP head pose. "headless" on purpose:
+                                  # the server needs no GUI bindings.

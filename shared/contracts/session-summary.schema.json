@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptly.local/schemas/session-summary.schema.json",
+  "title": "Adaptly Session Analytics Summary",
+  "description": "Shared format for versioned analytics calculated after a learning session ends.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "metric_version",
+    "session_id",
+    "user_id",
+    "content_id",
+    "duration_seconds",
+    "completed_at",
+    "computed_at",
+    "engagement_distribution",
+    "timeline_segments",
+    "longest_focused_period",
+    "intervention_metrics",
+    "recovery_metrics",
+    "assistant_usage",
+    "critical_section_engagement",
+    "chunks_completed",
+    "data_quality"
+  ],
+  "$defs": {
+    "engagement_state": {
+      "type": "string",
+      "enum": [
+        "focused",
+        "drifting",
+        "struggling",
+        "fatigued",
+        "recovered",
+        "unknown"
+      ]
+    },
+    "engagement_measure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "duration_seconds",
+        "percentage"
+      ],
+      "properties": {
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "percentage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "intervention_type": {
+      "type": "string",
+      "enum": [
+        "simplify_content",
+        "bullet_summary",
+        "break_suggestion",
+        "assistant_help_prompt",
+        "other"
+      ]
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "metric_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "duration_seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "computed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "engagement_distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "focused",
+        "drifting",
+        "struggling",
+        "fatigued",
+        "recovered",
+        "unknown"
+      ],
+      "properties": {
+        "focused": {
+          "$ref": "#/$defs/engagement_measure"
+        },
+        "drifting": {
+          "$ref": "#/$defs/engagement_measure"
+        },
+        "struggling": {
+          "$ref": "#/$defs/engagement_measure"
+        },
+        "fatigued": {
+          "$ref": "#/$defs/engagement_measure"
+        },
+        "recovered": {
+          "$ref": "#/$defs/engagement_measure"
+        },
+        "unknown": {
+          "$ref": "#/$defs/engagement_measure"
+        }
+      }
+    },
+    "timeline_segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "started_at",
+          "ended_at",
+          "duration_seconds",
+          "state"
+        ],
+        "properties": {
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "state": {
+            "$ref": "#/$defs/engagement_state"
+          },
+          "average_confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "chunk_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "longest_focused_period": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "started_at",
+            "ended_at",
+            "duration_seconds"
+          ],
+          "properties": {
+            "started_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "ended_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "duration_seconds": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "chunk_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "intervention_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_count",
+        "effective_count",
+        "ineffective_count",
+        "unknown_outcome_count",
+        "effectiveness_rate",
+        "by_type"
+      ],
+      "properties": {
+        "total_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "effective_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ineffective_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_outcome_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "effectiveness_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "by_type": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "intervention_type",
+              "total_count",
+              "effective_count",
+              "ineffective_count",
+              "unknown_outcome_count",
+              "effectiveness_rate"
+            ],
+            "properties": {
+              "intervention_type": {
+                "$ref": "#/$defs/intervention_type"
+              },
+              "total_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "effective_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ineffective_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unknown_outcome_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "effectiveness_rate": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "recovery_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eligible_intervention_count",
+        "recovered_intervention_count",
+        "recovery_rate",
+        "average_recovery_time_seconds"
+      ],
+      "properties": {
+        "eligible_intervention_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recovered_intervention_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recovery_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "average_recovery_time_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "recovered_intervention_count": {
+                "const": 0
+              }
+            },
+            "required": [
+              "recovered_intervention_count"
+            ]
+          },
+          "then": {
+            "properties": {
+              "average_recovery_time_seconds": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "eligible_intervention_count": {
+                "const": 0
+              }
+            },
+            "required": [
+              "eligible_intervention_count"
+            ]
+          },
+          "then": {
+            "properties": {
+              "recovery_rate": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "assistant_usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_event_count",
+        "learner_message_count",
+        "assistant_message_count",
+        "typed_input_count",
+        "voice_input_count",
+        "suggested_question_count",
+        "text_response_count",
+        "voice_response_count",
+        "successful_interaction_count",
+        "error_count"
+      ],
+      "properties": {
+        "total_event_count": { "type": "integer", "minimum": 0 },
+        "learner_message_count": { "type": "integer", "minimum": 0 },
+        "assistant_message_count": { "type": "integer", "minimum": 0 },
+        "typed_input_count": { "type": "integer", "minimum": 0 },
+        "voice_input_count": { "type": "integer", "minimum": 0 },
+        "suggested_question_count": { "type": "integer", "minimum": 0 },
+        "text_response_count": { "type": "integer", "minimum": 0 },
+        "voice_response_count": { "type": "integer", "minimum": 0 },
+        "successful_interaction_count": { "type": "integer", "minimum": 0 },
+        "error_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "critical_section_engagement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "critical_section_count",
+        "engaged_section_count",
+        "engagement_rate",
+        "focused_duration_seconds"
+      ],
+      "properties": {
+        "critical_section_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "engaged_section_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "engagement_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "focused_duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "chunks_completed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "data_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "has_sufficient_data",
+        "event_coverage_rate",
+        "unknown_duration_seconds",
+        "flags"
+      ],
+      "properties": {
+        "has_sufficient_data": {
+          "type": "boolean"
+        },
+        "event_coverage_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "unknown_duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "flags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "sparse_engagement",
+              "missing_intervention_outcomes",
+              "incomplete_assistant_metadata",
+              "excessive_unknown_gaps",
+              "missing_chunk_context",
+              "incomplete_session_timing",
+              "no_webcam_data"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
