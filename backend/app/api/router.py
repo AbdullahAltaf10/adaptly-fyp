@@ -29,6 +29,7 @@ module also means "show me Module 3" is one folder rather than four.
 from fastapi import APIRouter
 
 from app.content.routes import router as content_router
+from app.engagement.routes import router as engagement_router
 from app.users.routes import router as users_router
 
 api_router = APIRouter()
@@ -39,4 +40,5 @@ api_router.include_router(users_router)
 # Module 2 - Content Processing
 api_router.include_router(content_router)
 
-# Module 3 (engagement) is registered here as it is migrated, under issue #11.
+# Module 3 - Real-Time Engagement Detection
+api_router.include_router(engagement_router)

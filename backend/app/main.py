@@ -1,3 +1,5 @@
+import app.core.paths  # noqa: F401  - puts repo root on sys.path for `ml`
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

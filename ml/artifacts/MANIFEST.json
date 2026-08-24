@@ -1,0 +1,38 @@
+{
+  "description": "Integrity record for the Module 3 engagement artifacts. Verify with scripts/verify_artifacts.py before trusting a prediction: a model or scaler that has silently changed produces plausible-looking but wrong output, which is far harder to notice than a crash.",
+  "recorded_at": "2026-08-23T13:05:43.283853+00:00",
+  "feature_order": [
+    "gaze_x",
+    "gaze_y",
+    "blink_rate",
+    "pitch",
+    "yaw",
+    "roll",
+    "eye_openness",
+    "brow_raise",
+    "inter_brow"
+  ],
+  "input_shape": [
+    10,
+    9
+  ],
+  "class_mapping": {
+    "0": "focused",
+    "1": "drifting",
+    "2": "struggling"
+  },
+  "artifacts": {
+    "best_model_9f.keras": {
+      "sha256": "f9be69519aee735726b138e318ade3dda93f51c39c665e3216564888ad53700e",
+      "size_bytes": 427295
+    },
+    "scaler_9f.pkl": {
+      "sha256": "6df6eec73f1ce254f721f869d4dd531a0a1629837dff0dac76f59d4fff6d7ac5",
+      "size_bytes": 666
+    },
+    "focused_reference_means.json": {
+      "sha256": "dcf4a44168ebb952fefe778dc4e925e92adc69414839615ff9902b803b71dc35",
+      "size_bytes": 315
+    }
+  }
+}
