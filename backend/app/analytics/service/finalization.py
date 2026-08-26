@@ -32,6 +32,9 @@ from backend.app.analytics.persistence.events import (
     EngagementEventRepository,
     InterventionEventRepository,
 )
+from backend.app.analytics.persistence.learning_profiles import (
+    LearningProfileRepository,
+)
 from backend.app.analytics.persistence.session_analytics import (
     SessionAnalyticsRepository,
 )
@@ -71,6 +74,7 @@ class AnalyticsRepositories:
     assistant_events: AssistantEventRepository
     chunk_progress: ChunkProgressRepository
     session_analytics: SessionAnalyticsRepository
+    learning_profiles: LearningProfileRepository
 
     @classmethod
     def from_database(cls, database: Any) -> "AnalyticsRepositories":
@@ -81,6 +85,7 @@ class AnalyticsRepositories:
             assistant_events=AssistantEventRepository(database),
             chunk_progress=ChunkProgressRepository(database),
             session_analytics=SessionAnalyticsRepository(database),
+            learning_profiles=LearningProfileRepository(database),
         )
 
 

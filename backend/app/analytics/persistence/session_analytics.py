@@ -87,6 +87,34 @@ class SessionAnalyticsRepository:
         cursor = self._collection.find(query).sort("completed_at", 1)
         return [strip_storage_id(document) for document in cursor]
 
+    def list_by_user_page(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        offset: int,
+        content_id: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Paginated session history for one learner (Issue #29).
+
+        Ordered by ``completed_at`` descending (most recent session first),
+        with ``session_id`` as a tiebreaker so ordering stays deterministic
+        even when two sessions share a ``completed_at`` value.
+        """
+
+        query: dict[str, Any] = {"user_id": user_id}
+        if content_id is not None:
+            query["content_id"] = content_id
+        total_count = self._collection.count_documents(query)
+        cursor = (
+            self._collection.find(query)
+            .sort([("completed_at", -1), ("session_id", -1)])
+            .skip(offset)
+            .limit(limit)
+        )
+        items = [strip_storage_id(document) for document in cursor]
+        return items, total_count
+
     def set_insight_report_status(
         self, session_id: str, metric_version: str, status: str, *, now: Any = None
     ) -> None:
