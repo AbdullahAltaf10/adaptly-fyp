@@ -28,7 +28,7 @@ level information.
 | 26 | Build Module 8 analytics metric engine | ✅ Done | [issue-26-metric-engine.md](issue-26-metric-engine.md) |
 | 27 | Add Module 8 analytics persistence and indexes | ✅ Done | [issue-27-persistence.md](issue-27-persistence.md) |
 | 28 | Implement Module 8 session finalization and summary computation | ✅ Done | [issue-28-finalization.md](issue-28-finalization.md) |
-| 29 | Build Module 8 analytics and session history APIs | ⬜ Not started | — |
+| 29 | Build Module 8 analytics and session history APIs | ✅ Done | [issue-29-apis.md](issue-29-apis.md) |
 | 30 | Build Module 8 post-session analytics dashboard shell | ⬜ Not started | — |
 | 31 | Add Module 8 engagement timeline and intervention log | ⬜ Not started | — |
 | 32 | Implement Module 8 Gemini insight report and fallback | ⬜ Not started | — |
