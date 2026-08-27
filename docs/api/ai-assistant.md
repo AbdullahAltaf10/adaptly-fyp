@@ -158,3 +158,23 @@ keeps assistant input local. In Gemini mode, only the supplied educational
 context (question, active chunk, optional metadata/preferences, and bounded
 conversation window) is sent to Google's Gemini service; no raw webcam data is
 sent.
+
+## Known limitations
+
+- Conversation history is request-scoped and is not persisted in a database.
+- The backend cannot independently verify that supplied previous messages belong to
+  the provided `session_id` because individual messages do not currently contain
+  session identifiers.
+- The standalone frontend currently uses a demo study context because the upstream
+  session/content UI is not yet integrated.
+- Suggested questions are deterministic and generated locally from the active
+  section title.
+- Emotion signals use lightweight deterministic phrase rules and are intended only
+  as conversational support signals, not clinical or psychological assessments.
+- Browser speech recognition and speech synthesis depend on browser/platform
+  support and permissions.
+- Browser speech recognition may use browser/vendor speech services according to
+  the browser's own implementation and privacy policy.
+- Gemini mode requires a valid backend `GEMINI_API_KEY`.
+- The current API does not provide persistent learner profiles, analytics,
+  intervention logic, RAG, embeddings, or long-term assistant memory.
