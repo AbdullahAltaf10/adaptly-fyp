@@ -13,6 +13,22 @@ npm run dev
 
 The backend must be running as well — see [`backend/README.md`](../backend/README.md).
 
+## Tests
+
+```bash
+npm test          # vitest run
+npm run test:watch
+```
+
+Vitest with jsdom and Testing Library. The tooling matches what Module 5's
+assistant tests use, so those drop in without a second test runner.
+
+Covered so far: the pure capture helpers in `engagement/landmarks.js`, the
+constants that have to agree with the backend, and the out-of-frame debounce in
+`engagement/useFacePresence.js`. The capture hook itself is not covered — it
+needs `getUserMedia` and a MediaPipe landmarker, which is integration territory
+rather than a unit test.
+
 `.env` needs the backend URL and the Firebase web config, both described in
 [`.env.example`](.env.example). The Firebase values are public client
 identifiers rather than secrets, but they stay out of git so each developer can
