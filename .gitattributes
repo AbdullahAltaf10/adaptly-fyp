@@ -1,0 +1,11 @@
+# Keep the repository's own line endings stable across Windows and Linux.
+* text=auto
+
+# Model artifacts are hashed byte for byte (ml/artifacts/MANIFEST.json), so git
+# must never touch their line endings. Without this, checking out on Windows
+# rewrote focused_reference_means.json from LF to CRLF, and the hash check
+# failed on a file nobody had edited.
+#
+# This block must stay BELOW the rule above: in .gitattributes the last
+# matching rule wins.
+ml/artifacts/** -text
