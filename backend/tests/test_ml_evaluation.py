@@ -113,6 +113,74 @@ def test_model_card_figures_reproduce(split):
         ), f"{split} {label} recall drifted"
 
 
+# --------------------------------------------------------------------------
+# The opt-in Struggling threshold on predict()
+#
+# These live here rather than in test_ml_inference.py so that the change to
+# ml/inference/model.py stays a single additive edit, easy to review on its
+# own. The behaviour they pin is that nothing changes unless a caller asks.
+# --------------------------------------------------------------------------
+
+def _probabilities(monkeypatch, values):
+    """Stub the model so these tests exercise the decision rule, not the LSTM."""
+    from ml.inference import model as ml_model
+
+    class FakeModel:
+        def predict(self, _batch, verbose=0):
+            return np.array([values])
+
+    class FakeScaler:
+        def transform(self, array):
+            return array
+
+    monkeypatch.setattr(ml_model, "load_model", lambda: (FakeModel(), FakeScaler()))
+    return ml_model
+
+
+def _window():
+    return [[0.0] * FEATURE_COUNT for _ in range(WINDOW_SIZE)]
+
+
+def test_default_is_still_argmax(monkeypatch):
+    """No threshold passed must mean exactly the behaviour that shipped."""
+    ml_model = _probabilities(monkeypatch, [0.5, 0.2, 0.3])
+    assert ml_model.predict(_window())["state"] == "focused"
+
+
+def test_threshold_promotes_struggling_when_it_clears(monkeypatch):
+    """0.30 is not the argmax, but it clears a 0.25 bar."""
+    ml_model = _probabilities(monkeypatch, [0.5, 0.2, 0.3])
+    result = ml_model.predict(_window(), struggling_threshold=0.25)
+    assert result["state"] == "struggling"
+    assert result["confidence"] == pytest.approx(0.3)
+
+
+def test_threshold_leaves_other_classes_alone(monkeypatch):
+    """Below the bar, the ordinary argmax still decides - including drifting."""
+    ml_model = _probabilities(monkeypatch, [0.3, 0.6, 0.1])
+    assert ml_model.predict(_window(), struggling_threshold=0.25)["state"] == "drifting"
+
+
+def test_confidence_reports_the_reported_class(monkeypatch):
+    """
+    A promoted Struggling must report ITS probability, not the argmax class's.
+
+    Getting this wrong would put a confidence in the engagement event that
+    describes a different state than the one beside it - the same defect
+    already logged against rule-sourced states (G5).
+    """
+    ml_model = _probabilities(monkeypatch, [0.55, 0.15, 0.30])
+    result = ml_model.predict(_window(), struggling_threshold=0.25)
+    assert result["state"] == "struggling"
+    assert result["confidence"] == pytest.approx(0.30)
+
+
+def test_threshold_of_one_never_promotes(monkeypatch):
+    """A probability cannot reach 1.01, so the override can be switched off."""
+    ml_model = _probabilities(monkeypatch, [0.4, 0.2, 0.4])
+    assert ml_model.predict(_window(), struggling_threshold=1.01)["state"] == "focused"
+
+
 @needs_arrays
 def test_accuracy_is_reported_against_its_baseline():
     """
