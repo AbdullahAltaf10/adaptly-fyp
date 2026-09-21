@@ -144,4 +144,15 @@ def predict(feature_sequence, struggling_threshold: float = None) -> dict:
     return {
         "state": STATE_LABELS[predicted],
         "confidence": round(float(probabilities[predicted]), 4),
+        # Every class's probability, not only the winner's.
+        #
+        # A caller that reports a DIFFERENT state than this function returned -
+        # the smoothing layer holding a previous state through a transition,
+        # for instance - needs the probability of the state it actually
+        # reports. Without this it can only report the winner's confidence
+        # beside somebody else's label.
+        "probabilities": {
+            STATE_LABELS[index]: round(float(value), 4)
+            for index, value in enumerate(probabilities)
+        },
     }

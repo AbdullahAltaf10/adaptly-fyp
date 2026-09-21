@@ -28,6 +28,51 @@ SOURCE_MODEL = "lstm"
 SOURCE_RULE = "rule"
 SOURCE_HYBRID = "hybrid"
 
+# What `confidence` means in an engagement event
+# ----------------------------------------------
+# engagement-event.schema.json requires `confidence` and constrains it to a
+# number in [0, 1], but says nothing about what it measures. Defining it here,
+# because a field every module reads and nobody has defined is a field that
+# will be read three different ways.
+#
+#   confidence describes THE STATE THE EVENT REPORTS, from whichever layer
+#   produced that state.
+#
+#     source=lstm    the model's probability for the reported class
+#     source=hybrid  same - Deep Thinking changes `source`, not the state
+#     source=rule    the rule's own strength of evidence
+#
+# It is NOT "the model's confidence in its top class". That is what the code
+# used to send regardless of which layer decided the state, which meant a
+# `fatigued` event carried the model's confidence in `focused`.
+#
+# It is also not a calibrated probability. Module 3's model is measurably
+# uncalibrated (see ml/evaluation/), so treat confidence as an ordering
+# signal - useful for "more certain than that one" - and not as a percentage.
+
+# For a deterministic rule that either fires or does not. Says the rule's
+# condition was met, not that the underlying claim is certainly true.
+RULE_CERTAIN = 1.0
+
+
+def confidence_for(prediction: dict, reported_state: str) -> float:
+    """
+    The model's probability for `reported_state`, not for its own top class.
+
+    These differ whenever the smoothing layer is holding a previous state
+    through a transition, which is exactly what smoothing exists to do. Before
+    this, such an event carried the confidence of the raw class it was
+    deliberately NOT reporting.
+
+    Falls back to the top-class confidence when per-class probabilities are
+    unavailable - an older caller, or a stubbed model in a test - so this can
+    be introduced without every call site changing at once.
+    """
+    probabilities = prediction.get("probabilities")
+    if probabilities and reported_state in probabilities:
+        return float(probabilities[reported_state])
+    return float(prediction["confidence"])
+
 # The 7 facial values the contract names, mapped from our internal feature order.
 # brow_raise and inter_brow were added to the contract during the #7 review -
 # without them the 9-feature model output could not be represented at all.
