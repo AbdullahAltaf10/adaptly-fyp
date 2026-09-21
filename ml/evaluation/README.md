@@ -25,23 +25,35 @@ same test set. Accuracy here measures the class imbalance, not the model.
 
 ## What is missing
 
-**The evaluation script itself.** The numbers above were produced in a notebook
-that was not kept. There is no command in this repository that regenerates
-them, which means they cannot currently be reproduced or re-checked after a
-change.
+> **Partly resolved.** The three items struck through below were closed by the
+> work in [`FINDINGS.md`](FINDINGS.md). The rest of this file still stands.
 
-**Hyperparameters and seeds.** Layer sizes, learning rate, batch size, epoch
-count and random seeds were not recorded. A retrain would be a new model that
-happens to resemble this one, not a reproduction of it.
+**~~The evaluation script itself.~~** `evaluate.py` now reproduces the table
+above from the committed artifacts, printing a measured-against-published delta
+per figure and refusing to run if the artifact hashes do not match
+`MANIFEST.json`. Every figure reproduces within 0.004.
 
-**Repeated runs.** Exactly one training run was performed per feature
-configuration. The 9-feature version was chosen over the 7- and 11-feature
-versions on a single run each, so **the difference between them has not been
-shown to exceed run-to-run variation.** The choice is defensible on reasoning
-(consistency between test and validation) but is not statistically established.
+**~~Hyperparameters and seeds.~~** Recovered from the original Colab notebook:
+50 epochs, batch 32, seed 42, Adam at 5e-4, early stopping on
+`val_macro_recall` with patience 7, `StandardScaler` fitted on train only. A
+retrain is now a reproduction rather than a resemblance.
 
-**Per-epoch curves.** Not saved, so overfitting cannot be inspected after the
-fact.
+**~~The 7f / 9f / 11f comparison.~~** Redone under identical evaluation by
+`compare_variants.py`. The answer turned out to be more interesting than "not
+statistically established": the variants succeed on opposite splits, which is
+the signature of fitting subjects rather than behaviour. See `FINDINGS.md` §3.
+
+**Repeated runs for the original variant choice.** The 9-feature version was
+still chosen over 7- and 11-feature on one run each. Later work in this
+directory uses multiple seeds with significance tests; that original comparison
+does not.
+
+**Per-epoch curves for the production run.** Not saved as a file, though they
+are visible in the recovered notebook's own cell outputs.
+
+**Leave-one-subject-out cross-validation.** Every figure here, including the
+improvements reported in `FINDINGS.md`, rests on a single train/test split.
+LOSO would be a substantially stronger basis and has not been done.
 
 **Any evaluation on this system's own users.** Everything above is measured
 against DAiSEE. DAiSEE is 80% male, predominantly Asian, and recorded in
