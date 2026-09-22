@@ -28,6 +28,7 @@ module also means "show me Module 3" is one folder rather than four.
 
 from fastapi import APIRouter
 
+from app.content.routes import router as content_router
 from app.users.routes import router as users_router
 
 api_router = APIRouter()
@@ -35,5 +36,7 @@ api_router = APIRouter()
 # Module 1 — User Profile and Access Management
 api_router.include_router(users_router)
 
-# Module 2 (content) and Module 3 (engagement) routers are registered here as
-# they are migrated, under issues #10 and #11.
+# Module 2 - Content Processing
+api_router.include_router(content_router)
+
+# Module 3 (engagement) is registered here as it is migrated, under issue #11.
