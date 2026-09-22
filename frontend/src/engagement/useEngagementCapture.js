@@ -37,7 +37,17 @@ function newSessionId() {
   );
 }
 
-export function useEngagementCapture({ active, contentId, chunkId } = {}) {
+export function useEngagementCapture({
+  active,
+  contentId,
+  chunkId,
+  /**
+   * Returns seconds on the current chunk. A function rather than a value so
+   * dwell can change every second without re-running the capture effect -
+   * restarting it would tear down the camera and the landmarker.
+   */
+  getDwellSeconds,
+} = {}) {
   const videoRef = useRef(null);
   const landmarkerRef = useRef(null);
   const windowRef = useRef([]);
@@ -54,6 +64,11 @@ export function useEngagementCapture({ active, contentId, chunkId } = {}) {
    */
   const inFlightRef = useRef(false);
   const calibrateRef = useRef(null);
+
+  // Kept in a ref so a new function identity on each render does not restart
+  // the capture loop.
+  const dwellRef = useRef(getDwellSeconds);
+  dwellRef.current = getDwellSeconds;
 
   const [status, setStatus] = useState("Waiting to start...");
   const [ready, setReady] = useState(false);
@@ -111,7 +126,12 @@ export function useEngagementCapture({ active, contentId, chunkId } = {}) {
       }
       inFlightRef.current = true;
       try {
-        const res = await analyze(frames, { sessionId, contentId, chunkId });
+        const res = await analyze(frames, {
+          sessionId,
+          contentId,
+          chunkId,
+          dwellSeconds: dwellRef.current?.() ?? 0,
+        });
         if (!cancelled) setPrediction(res.data);
       } catch (err) {
         if (!cancelled) setStatus(`Prediction failed: ${err.message}`);
@@ -251,6 +271,7 @@ export function useEngagementCapture({ active, contentId, chunkId } = {}) {
 
   return {
     videoRef,
+    sessionId: sessionIdRef.current,
     status,
     ready,
     faceDetected,
