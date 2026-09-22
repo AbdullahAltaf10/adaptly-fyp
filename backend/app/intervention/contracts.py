@@ -185,6 +185,13 @@ def advance(event: dict, delivery_status: str, *, timestamp: str = None) -> dict
 
     The timestamp stops moving once it becomes a recovery anchor
     ------------------------------------------------------------
+    This is a workaround, not the design. Issue #46 asks for a `delivered_at`
+    field on the contract, set once at the moment the intervention reached the
+    learner and never moved. When that lands, set `delivered_at` here instead
+    and delete the freezing below - `timestamp` then goes back to meaning the
+    moment the intervention was offered, which is what it says it is.
+
+    Until then there is only one timestamp and it has to be the anchor:
     There is one stored document per intervention, and Module 8's
     `_recovery_start_time` reads a single field from it - `timestamp` - and
     treats that as the moment the intervention reached the learner. It only
