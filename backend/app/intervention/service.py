@@ -27,7 +27,7 @@ still a visible one in development.
 
 import logging
 
-from app.intervention import contracts, cooldown, store
+from app.intervention import content, contracts, cooldown, store
 from app.intervention.decider import Signals
 from app.intervention.policy import DefaultPolicy
 
@@ -93,7 +93,6 @@ def evaluate(
     content_id: str = None,
     chunk_id: str = None,
     dwell_seconds: float = 0.0,
-    is_critical: bool = False,
     engagement_event_id: str = None,
 ) -> dict:
     """
@@ -124,7 +123,13 @@ def evaluate(
         brow_struggling=brow_struggling,
         chunk_id=chunk_id,
         content_id=content_id,
-        is_critical=is_critical,
+        # Read from the stored chunk, never from the request. In P2 this
+        # arrived from the browser because there was nowhere else to get it,
+        # which let a client lower its own intervention thresholds by claiming
+        # a section was critical. `is_critical` is already a field on a chunk
+        # in Module 2's contract, so the day Module 9 starts writing it this
+        # starts honouring it with no change here.
+        is_critical=content.is_critical(uid, content_id, chunk_id),
         dwell_seconds=max(0.0, min(float(dwell_seconds or 0.0), MAX_DWELL_SECONDS)),
         engagement_event_id=engagement_event_id,
     )

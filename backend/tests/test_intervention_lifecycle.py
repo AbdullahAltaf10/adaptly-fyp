@@ -39,7 +39,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.auth.dependencies import get_current_user  # noqa: E402
 from app.engagement import furrow, routes as engagement_routes  # noqa: E402
-from app.intervention import contracts, cooldown, service, store  # noqa: E402
+from app.intervention import content, contracts, cooldown, service, store  # noqa: E402
 from app.intervention.decider import (  # noqa: E402
     ASSISTANT_HELP_PROMPT,
     BREAK_SUGGESTION,
@@ -819,23 +819,71 @@ def test_dwell_from_the_viewer_unlocks_them(monkeypatch, stubbed_window):
     assert body["intervention"]["intervention_type"] == SIMPLIFY_CONTENT
 
 
+def _tagged_chunks(monkeypatch, critical):
+    """
+    Stand in for Module 2's content collection.
+
+    `is_critical` is a field on a chunk in Module 2's contract, so this is the
+    shape Module 9 will eventually write to - not something invented here.
+    """
+    doc = {
+        "chunks": [
+            {"chunk_id": "7", "order": 7, "text": "A passage.", "is_critical": critical}
+        ]
+    }
+
+    class Content:
+        def find_one(self, query, projection=None):
+            return dict(doc)
+
+    class DB:
+        content = Content()
+
+    monkeypatch.setattr(content, "db", DB())
+    monkeypatch.setattr(content, "_object_id", lambda cid: cid)
+    content.reset_cache()
+
+
 def test_a_critical_section_is_helped_sooner(monkeypatch, stubbed_window):
     """Scope 6.9 - respond earlier where comprehension matters most."""
     as_user()
     _furrowed(monkeypatch, True)
     engagement_routes.session_state.start("u1", "s1")
+    window = {**stubbed_window, "dwell_seconds": 30.0, "content_id": "c1", "chunk_id": "7"}
 
-    ordinary = client.post(
-        "/engagement/analyze", json={**stubbed_window, "dwell_seconds": 30.0}
-    ).json()
+    _tagged_chunks(monkeypatch, critical=False)
+    ordinary = client.post("/engagement/analyze", json=window).json()
     assert ordinary["intervention"]["intervention_type"] == BULLET_SUMMARY
 
     cooldown.reset("u1", "s1")
-    critical = client.post(
-        "/engagement/analyze",
-        json={**stubbed_window, "dwell_seconds": 30.0, "is_critical": True},
-    ).json()
+    _tagged_chunks(monkeypatch, critical=True)
+    critical = client.post("/engagement/analyze", json=window).json()
     assert critical["intervention"]["intervention_type"] == SIMPLIFY_CONTENT
+
+
+def test_a_client_can_no_longer_claim_its_own_section_is_critical(monkeypatch, stubbed_window):
+    """
+    In P2 `is_critical` came from the request, so a browser could lower its own
+    intervention thresholds by claiming a section mattered. It is read from the
+    stored chunk now, and the request field is gone - sending it changes
+    nothing.
+    """
+    as_user()
+    _furrowed(monkeypatch, True)
+    engagement_routes.session_state.start("u1", "s1")
+    _tagged_chunks(monkeypatch, critical=False)
+
+    body = client.post(
+        "/engagement/analyze",
+        json={
+            **stubbed_window,
+            "dwell_seconds": 30.0,
+            "content_id": "c1",
+            "chunk_id": "7",
+            "is_critical": True,
+        },
+    ).json()
+    assert body["intervention"]["intervention_type"] == BULLET_SUMMARY
 
 
 def test_ending_the_session_through_the_endpoint_clears_the_quiet_period(

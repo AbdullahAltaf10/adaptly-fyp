@@ -39,3 +39,11 @@ scikit-learn>=1.9.0               # loads scaler_9f.pkl. A version mismatch agai
 numpy>=2.5.1
 opencv-python-headless>=5.0.0.93  # solvePnP head pose. "headless" on purpose:
                                   # the server needs no GUI bindings.
+
+# --- Adaptive intervention (Module 4) ---
+google-genai>=1.50.0              # content simplification and summaries.
+                                  # Module 5 needs the same package; whichever
+                                  # branch merges second can drop this block.
+                                  # Module 4 degrades without it rather than
+                                  # failing to import - see
+                                  # app/intervention/provider.py

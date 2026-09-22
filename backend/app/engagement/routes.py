@@ -60,14 +60,6 @@ class AnalyzeRequest(BaseModel):
     # right failure - no dwell evidence, no dwell-based intervention.
     dwell_seconds: Optional[float] = 0.0
 
-    # Set for a section HR has tagged as critical (scope 6.9, respond earlier
-    # where comprehension matters most). Module 9 owns that tagging and does
-    # not exist, so this arrives from the client for now. The exposure is
-    # bounded and one-directional: it only lowers the dwell gates, so the worst
-    # a client can do by lying is ask for more help than it needs, and cooldown
-    # still caps the rate. It must move server-side when Module 9 lands.
-    is_critical: Optional[bool] = False
-
 
 class SessionRequest(BaseModel):
     session_id: str
@@ -266,7 +258,6 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
                 content_id=payload.content_id,
                 chunk_id=payload.chunk_id,
                 dwell_seconds=payload.dwell_seconds,
-                is_critical=payload.is_critical,
                 engagement_event_id=event["event_id"],
             )
         except Exception as error:

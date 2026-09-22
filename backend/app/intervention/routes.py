@@ -34,7 +34,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.auth.dependencies import get_current_user
-from app.intervention import contracts, service, store
+from app.intervention import contracts, provider, service, simplify, store
 
 router = APIRouter(prefix="/intervention", tags=["intervention"])
 
@@ -85,6 +85,62 @@ def update_status(
         "starts_recovery_measurement": contracts.starts_recovery_measurement(
             event["intervention_type"], event["delivery_status"]
         ),
+    }
+
+
+@router.get("/{intervention_id}/content")
+def intervention_content(intervention_id: str, user=Depends(get_current_user)):
+    """
+    The text to show for a simplify_content or bullet_summary intervention.
+
+    Separate from the analyze response on purpose. A model call takes seconds
+    and /engagement/analyze runs every ten, serialised per session, so
+    generating there would stall engagement detection behind it. Here the wait
+    is on a request of its own, and a cache hit makes it immediate.
+
+    Status codes:
+
+        200  text, with `generator` naming what produced it and `cached`
+             saying whether anything was generated for this request.
+        404  no such intervention for this user.
+        409  this type shows a fixed sentence - it is already in `reason`.
+        422  the passage could not be read, or is too short to be worth
+             rewriting. The client should report `failed`.
+        503  a model was needed and none was available, or it did not answer.
+             The client should report `failed`, which releases the cooldown so
+             the learner is not left silent for two minutes over an outage.
+    """
+    event = store.get(intervention_id)
+    if event is None or event.get("user_id") != user["uid"]:
+        raise HTTPException(status_code=404, detail="No such intervention.")
+
+    try:
+        result = simplify.for_intervention(user["uid"], event)
+    except simplify.NotGenerated:
+        raise HTTPException(
+            status_code=409,
+            detail="This intervention has no generated content; use its reason.",
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=422, detail=str(error))
+    except provider.GenerationUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error))
+    except provider.GenerationFailed:
+        # The message can echo the passage back, so it is not returned.
+        raise HTTPException(status_code=503, detail="The text could not be generated.")
+
+    return {
+        "intervention_id": intervention_id,
+        "intervention_type": event["intervention_type"],
+        "chunk_id": result["chunk_id"],
+        # Returned alongside so the reader can see what was changed. Scope 6.4
+        # asks for support delivered inline rather than content being replaced
+        # out from under somebody, and a learner cannot judge a rewrite they
+        # are not allowed to compare against.
+        "original": result["original"],
+        "generated": result["generated"],
+        "generator": result["generator"],
+        "cached": result["cached"],
     }
 
 
