@@ -19,6 +19,7 @@ everything for one module sits in one folder:
     app/auth/                  -> token verification, roles, authorization
     app/content/routes.py      -> /content/*      (Module 2)
     app/engagement/routes.py   -> /engagement/*   (Module 3)
+    app/intervention/routes.py -> /intervention/* (Module 4)
 
 The reason is practical: with routes split out into a shared `api/` folder,
 changing one module means editing two places, and two people working on
@@ -30,6 +31,7 @@ from fastapi import APIRouter
 
 from app.content.routes import router as content_router
 from app.engagement.routes import router as engagement_router
+from app.intervention.routes import router as intervention_router
 from app.users.routes import router as users_router
 
 api_router = APIRouter()
@@ -42,3 +44,6 @@ api_router.include_router(content_router)
 
 # Module 3 - Real-Time Engagement Detection
 api_router.include_router(engagement_router)
+
+# Module 4 - Adaptive Intervention
+api_router.include_router(intervention_router)

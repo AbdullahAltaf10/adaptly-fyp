@@ -123,6 +123,18 @@ class DefaultPolicy:
                 triggering_engagement_event_id=signals.engagement_event_id,
             )
 
+        # Saying nothing while somebody is coming back up.
+        #
+        # `recovered` is Module 3's rule state for a learner who has returned
+        # to focus after a dip. Two reasons not to interrupt there. It is
+        # obviously wrong on its face - the problem just resolved itself. And
+        # it would corrupt measurement: an intervention starting inside an
+        # earlier one's recovery window is exactly the ambiguity Module 8's
+        # `_observed_recovery` has to take a `competing_start` argument to
+        # cope with, and neither intervention can then be credited.
+        if signals.state == "recovered":
+            return None
+
         strong = signals.raw_struggling and signals.brow_struggling
         broad = signals.raw_struggling or signals.brow_struggling
         if not broad:
