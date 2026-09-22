@@ -66,6 +66,16 @@ RATE_LIMITED = 429
 MAX_ATTEMPTS = 3
 BACKOFF_SECONDS = (1.0, 3.0)
 
+# A 429 is not always transient, and the retry cannot tell the difference.
+# Measured on the free tier: the quota is
+# GenerateRequestsPerDayPerProjectPerModel-FreeTier, 20 requests PER DAY PER
+# MODEL. Once that is gone, all three attempts fail and the learner gets
+# nothing until tomorrow.
+#
+# That is survivable only because of cache.py. A passage is generated once and
+# then served to everyone, so a ten-chunk document costs at most twenty calls
+# ever, not twenty per learner. Anything beyond a demo needs a paid tier.
+
 GENERATOR_GEMINI = "gemini"
 GENERATOR_EXTRACTIVE = "extractive"
 
