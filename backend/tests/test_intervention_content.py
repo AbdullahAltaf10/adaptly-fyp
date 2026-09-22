@@ -291,11 +291,50 @@ def test_every_result_names_what_produced_it(fake_cache):
     assert result["generator"] == "stub"
 
 
-def test_a_rewrite_longer_than_the_passage_is_rejected(fake_cache):
-    """A simplification that is half as long again is not one."""
-    stub = StubGenerator(output=PASSAGE * 2)
+def test_a_longer_rewrite_is_accepted_because_explaining_a_term_lengthens_it(fake_cache):
+    """
+    This is a regression test for a guard of mine that was measurably wrong.
+
+    MAX_LENGTH_RATIO started at 1.5, on the reasoning that a rewrite half as
+    long again is not a simplification. Running six real passages through
+    gemini-3.6-flash gave ratios of 1.16 to 2.29, so that guard would have
+    rejected three of five good rewrites. Simplifying training material
+    lengthens it - explaining a term inline is longer than the term, and that
+    is the whole point.
+    """
+    rewrite = (
+        "Amortisation, which means spreading a cost out over time, applies to "
+        "an intangible asset - an asset you cannot touch, such as a patent. "
+        "The cost is spread over the period the asset is expected to bring "
+        "economic benefit, meaning the time it is expected to make money. Each "
+        "period a charge is recorded in the income statement, the document that "
+        "tracks income and costs. When the useful life cannot be worked out "
+        "reliably, the asset is not amortised at all and is instead checked once "
+        "a year for impairment, meaning a drop in value."
+    )
+    assert len(rewrite) / len(PASSAGE) > 1.5, "this sample no longer tests anything"
+
+    result = simplify.generate(
+        task=prompts.TASK_SIMPLIFY, text=PASSAGE, generator=StubGenerator(rewrite)
+    )
+    assert result["generated"] == rewrite
+
+
+def test_runaway_output_is_still_rejected(fake_cache):
+    """
+    What the guard is actually for, now that length is not the signal: a model
+    that loops, pads, or hands the whole prompt back.
+    """
+    stub = StubGenerator(output=PASSAGE * 4)
     with pytest.raises(provider.GenerationFailed):
         simplify.generate(task=prompts.TASK_SIMPLIFY, text=PASSAGE, generator=stub)
+
+
+def test_runaway_bullets_are_rejected_too(fake_cache):
+    """The guard covers both tasks - looping is not specific to one."""
+    stub = StubGenerator(output=PASSAGE * 4)
+    with pytest.raises(provider.GenerationFailed):
+        simplify.generate(task=prompts.TASK_BULLETS, text=PASSAGE, generator=stub)
 
 
 def test_a_passage_handed_straight_back_is_rejected(fake_cache):
@@ -602,6 +641,107 @@ def test_module_4_uses_the_same_environment_variables_as_module_5():
     assert provider.ENV_API_KEY == "GEMINI_API_KEY"
     assert provider.ENV_MODEL == "GEMINI_MODEL"
     assert provider.ENV_TIMEOUT_MS == "GEMINI_TIMEOUT_MS"
+
+
+def _fake_sdk(monkeypatch, failures, error_class="ServerError", code=503):
+    """
+    Stand in for google.genai, failing the first `failures` calls.
+
+    Returns a counter so a test can assert how many attempts were made.
+    """
+    import sys
+    import types as pytypes
+
+    calls = {"n": 0}
+
+    class APIError(Exception):
+        pass
+
+    class ServerError(APIError):
+        pass
+
+    class ClientError(APIError):
+        pass
+
+    raised = {"ServerError": ServerError, "ClientError": ClientError}[error_class]
+
+    class Models:
+        def generate_content(self, *, model, contents):
+            calls["n"] += 1
+            if calls["n"] <= failures:
+                error = raised("overloaded")
+                error.code = code
+                raise error
+            return pytypes.SimpleNamespace(text="Rewritten plainly.")
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.models = Models()
+
+    genai = pytypes.ModuleType("google.genai")
+    genai.Client = Client
+    errors = pytypes.ModuleType("google.genai.errors")
+    errors.APIError, errors.ServerError, errors.ClientError = APIError, ServerError, ClientError
+    sdk_types = pytypes.ModuleType("google.genai.types")
+    sdk_types.HttpOptions = lambda **kwargs: kwargs
+    genai.errors, genai.types = errors, sdk_types
+    google = pytypes.ModuleType("google")
+    google.genai = genai
+
+    for name, module in (
+        ("google", google), ("google.genai", genai),
+        ("google.genai.errors", errors), ("google.genai.types", sdk_types),
+    ):
+        monkeypatch.setitem(sys.modules, name, module)
+
+    monkeypatch.setattr(provider.time, "sleep", lambda seconds: None)
+    return calls
+
+
+def test_a_transient_outage_is_retried(monkeypatch):
+    """
+    Not theoretical. Two of about fifteen calls came back 503 "currently
+    experiencing high load" while measuring prompt output. Without this a
+    learner loses the intervention over a few seconds of load.
+    """
+    calls = _fake_sdk(monkeypatch, failures=2)
+    output = provider.GeminiGenerator("key").generate(
+        "p", task=prompts.TASK_SIMPLIFY, text=PASSAGE
+    )
+    assert output == "Rewritten plainly."
+    assert calls["n"] == 3
+
+
+def test_it_gives_up_rather_than_retrying_forever(monkeypatch):
+    calls = _fake_sdk(monkeypatch, failures=99)
+    with pytest.raises(provider.GenerationFailed):
+        provider.GeminiGenerator("key").generate("p", task=prompts.TASK_SIMPLIFY, text=PASSAGE)
+    assert calls["n"] == provider.MAX_ATTEMPTS
+
+
+def test_being_rate_limited_is_retried(monkeypatch):
+    """
+    429 is a 4xx but it is not a mistake. I hit it myself running a dozen
+    calls in a row on the free tier, and a burst of interventions across a few
+    learners would reach the per-minute limit just as easily.
+    """
+    calls = _fake_sdk(monkeypatch, failures=2, error_class="ClientError", code=429)
+    output = provider.GeminiGenerator("key").generate(
+        "p", task=prompts.TASK_SIMPLIFY, text=PASSAGE
+    )
+    assert output == "Rewritten plainly."
+    assert calls["n"] == 3
+
+
+def test_a_bad_key_is_not_retried(monkeypatch):
+    """
+    Every other 4xx is a bad key or a bad model name. Retrying only makes a
+    misconfiguration slower to diagnose.
+    """
+    calls = _fake_sdk(monkeypatch, failures=99, error_class="ClientError", code=401)
+    with pytest.raises(provider.GenerationFailed):
+        provider.GeminiGenerator("key").generate("p", task=prompts.TASK_SIMPLIFY, text=PASSAGE)
+    assert calls["n"] == 1
 
 
 def test_a_missing_sdk_is_reported_not_crashed(monkeypatch):

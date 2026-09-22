@@ -29,11 +29,15 @@ the learner a delay rather than two minutes of silence.
 
 What it refuses to do
 ---------------------
-If the output is empty, is longer than the passage it was meant to simplify, or
-comes back unchanged, it is rejected rather than shown. A "simplification" that
-is twice as long is not one, and an unchanged passage means the model did
-nothing - in both cases showing it would spend a real intervention on an
-interruption that helps nobody, and Module 8 would record it as delivered.
+Output that is empty, that has run away from the passage, or that comes back
+unchanged is rejected rather than shown. An unchanged passage means the model
+did nothing, and showing it would spend a real intervention on an interruption
+that helps nobody while Module 8 recorded it as delivered.
+
+The length guard is deliberately loose, and the comment on MAX_LENGTH_RATIO
+says why: measuring real output showed that simplifying lengthens text, because
+explaining a term inline is longer than the term. A tight guard rejects good
+work.
 """
 
 import logging
@@ -50,8 +54,25 @@ GENERATED_TYPES = {
     BULLET_SUMMARY: prompts.TASK_BULLETS,
 }
 
-# A rewrite this much longer than the original is not a simplification.
-MAX_LENGTH_RATIO = 1.5
+# A guard against runaway output, NOT against length.
+#
+# This started at 1.5, on the reasoning that "a rewrite half as long again is
+# not a simplification". Measuring real output disproved that. Six passages
+# through gemini-3.6-flash, output length over input length:
+#
+#     simplify_content   1.16  1.27  1.50  1.65  2.29     mean 1.57
+#     bullet_summary     1.02  1.35  1.67  1.67  2.03  2.13
+#
+# A ratio of 1.5 would have rejected three of five perfectly good rewrites.
+# Simplifying training material lengthens it, because that is what explaining
+# a term inline does - "ischaemia, which means a lack of blood flow over a long
+# period" is longer than "ischaemia" and is the entire point.
+#
+# So the guard stays, for the case it is actually useful in: a model that loops,
+# pads, or hands the whole prompt back. 3.0 is above everything measured and
+# still catches a doubling plus commentary. It applies to both tasks now, since
+# runaway output is not specific to one.
+MAX_LENGTH_RATIO = 3.0
 
 # Below this there is nothing worth rewriting, and the model tends to pad.
 MIN_PASSAGE_CHARS = 80
@@ -88,9 +109,10 @@ def validate(task: str, original: str, generated: str) -> str:
     if not generated:
         raise provider.GenerationFailed("empty output")
 
+    if len(generated) > len(original) * MAX_LENGTH_RATIO:
+        raise provider.GenerationFailed("the output ran away from the passage")
+
     if task == prompts.TASK_SIMPLIFY:
-        if len(generated) > len(original) * MAX_LENGTH_RATIO:
-            raise provider.GenerationFailed("the rewrite is longer than the passage")
         if generated.strip() == original.strip():
             raise provider.GenerationFailed("the passage came back unchanged")
 

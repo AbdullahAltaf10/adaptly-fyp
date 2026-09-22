@@ -35,6 +35,7 @@ have to guess at.
 import logging
 import os
 import re
+import time
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,18 @@ ENV_MODE = "INTERVENTION_CONTENT_MODE"
 
 DEFAULT_MODEL = "gemini-3.6-flash"
 DEFAULT_TIMEOUT_MS = 60_000
+
+# Gemini returns 503 "currently experiencing high load" often enough to matter:
+# two of about fifteen calls while measuring prompt output. Without a retry a
+# learner loses the intervention entirely over a few seconds of load.
+#
+# 5xx and 429 are retried. 429 is a 4xx but it is a rate limit, not a mistake -
+# the free tier limits calls per minute, and a burst of interventions across a
+# few learners reaches that easily. Every other 4xx is a bad key or a bad model
+# name; retrying those only makes a misconfiguration slower to diagnose.
+RATE_LIMITED = 429
+MAX_ATTEMPTS = 3
+BACKOFF_SECONDS = (1.0, 3.0)
 
 GENERATOR_GEMINI = "gemini"
 GENERATOR_EXTRACTIVE = "extractive"
@@ -104,31 +117,53 @@ class GeminiGenerator(TextGenerator):
     def generate(self, prompt: str, *, task: str, text: str) -> str:
         try:
             from google import genai
-            from google.genai import types
+            from google.genai import errors, types
         except ImportError as error:
             raise GenerationUnavailable(
                 "the Gemini SDK is not installed on this server"
             ) from error
 
-        try:
-            # types.HttpOptions rather than a plain dict, matching how Module 5
-            # builds its client. Same SDK, same construction, so there is one
-            # shape to get right instead of two.
-            client = genai.Client(
-                api_key=self.api_key,
-                http_options=types.HttpOptions(timeout=self.timeout_ms),
-            )
-            response = client.models.generate_content(model=self.model, contents=prompt)
-        except Exception as error:
-            # Logged by type only. The prompt carries the learner's study
-            # material and the exception text can echo it back.
-            log.warning("Gemini call failed: %s", type(error).__name__)
-            raise GenerationFailed("the model did not answer") from error
+        # types.HttpOptions rather than a plain dict, matching how Module 5
+        # builds its client. Same SDK, same construction, so there is one
+        # shape to get right instead of two.
+        client = genai.Client(
+            api_key=self.api_key,
+            http_options=types.HttpOptions(timeout=self.timeout_ms),
+        )
 
-        output = getattr(response, "text", None)
-        if not output:
-            raise GenerationFailed("the model returned nothing")
-        return output
+        last = None
+        for attempt in range(MAX_ATTEMPTS):
+            try:
+                response = client.models.generate_content(
+                    model=self.model, contents=prompt
+                )
+            except errors.APIError as error:
+                transient = isinstance(error, errors.ServerError) or (
+                    getattr(error, "code", None) == RATE_LIMITED
+                )
+                if not transient:
+                    log.warning("Gemini call failed: %s", type(error).__name__)
+                    raise GenerationFailed("the model did not answer") from error
+
+                # Logged by type only, because the exception text can echo back
+                # the learner's study material.
+                last = error
+                log.warning(
+                    "Gemini unavailable, attempt %d of %d", attempt + 1, MAX_ATTEMPTS
+                )
+                if attempt + 1 < MAX_ATTEMPTS:
+                    time.sleep(BACKOFF_SECONDS[min(attempt, len(BACKOFF_SECONDS) - 1)])
+                continue
+            except Exception as error:
+                log.warning("Gemini call failed: %s", type(error).__name__)
+                raise GenerationFailed("the model did not answer") from error
+
+            output = getattr(response, "text", None)
+            if not output:
+                raise GenerationFailed("the model returned nothing")
+            return output
+
+        raise GenerationFailed("the model was unavailable") from last
 
 
 class ExtractiveGenerator(TextGenerator):
