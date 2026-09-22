@@ -41,9 +41,14 @@ opencv-python-headless>=5.0.0.93  # solvePnP head pose. "headless" on purpose:
                                   # the server needs no GUI bindings.
 
 # --- Adaptive intervention (Module 4) ---
-google-genai>=1.50.0              # content simplification and summaries.
-                                  # Module 5 needs the same package; whichever
-                                  # branch merges second can drop this block.
+google-genai>=2.0                 # content simplification and summaries.
                                   # Module 4 degrades without it rather than
                                   # failing to import - see
                                   # app/intervention/provider.py
+                                  #
+                                  # Module 5 declares this too, but in
+                                  # backend/pyproject.toml (PR #43) rather than
+                                  # here, and pinned >=1.0,<2.0 - which excludes
+                                  # the current release. Both manifests cannot
+                                  # be satisfied at once. Raised on #43; this
+                                  # line tracks what actually installs.

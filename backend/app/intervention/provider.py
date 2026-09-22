@@ -104,15 +104,19 @@ class GeminiGenerator(TextGenerator):
     def generate(self, prompt: str, *, task: str, text: str) -> str:
         try:
             from google import genai
+            from google.genai import types
         except ImportError as error:
             raise GenerationUnavailable(
                 "the Gemini SDK is not installed on this server"
             ) from error
 
         try:
+            # types.HttpOptions rather than a plain dict, matching how Module 5
+            # builds its client. Same SDK, same construction, so there is one
+            # shape to get right instead of two.
             client = genai.Client(
                 api_key=self.api_key,
-                http_options={"timeout": self.timeout_ms},
+                http_options=types.HttpOptions(timeout=self.timeout_ms),
             )
             response = client.models.generate_content(model=self.model, contents=prompt)
         except Exception as error:
