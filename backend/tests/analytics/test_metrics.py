@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from backend.app.analytics.domain.metrics import (
+from app.analytics.domain.metrics import (
     DEFAULT_CONFIG,
     METRIC_VERSION,
     build_session_summary,
@@ -22,7 +22,7 @@ from backend.app.analytics.domain.metrics import (
     MetricConfig,
     segment_engagement_timeline,
 )
-from backend.tests.analytics.fixtures import (
+from tests.analytics.fixtures import (
     SCENARIO_FIXTURES,
     assistant,
     engagement,
