@@ -177,10 +177,12 @@ describe("the learner's own actions", () => {
 
 describe("when a second intervention arrives", () => {
   /**
-   * The old one is left where it is rather than auto-dismissed. The learner
-   * did not dismiss it, so saying they did would be false - and for an
-   * automatic type already at `displayed`, moving it to `dismissed` currently
-   * removes it from Module 8's recovery metrics entirely (issue #46).
+   * The old one is left where it is rather than auto-dismissed, because the
+   * learner did not dismiss it and `dismissed` writes an outcome.
+   *
+   * Since #54 this no longer costs the measurement either way - `delivered_at`
+   * survives a later dismissal - so this is now about the record being true
+   * rather than about protecting a metric.
    */
   it("does not dismiss the one already on screen", async () => {
     const { result, rerender } = setup(offered(SIMPLIFY_CONTENT, "first"));

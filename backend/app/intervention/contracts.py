@@ -13,8 +13,13 @@ rejected twice: the schema refuses it and persistence silently drops it. That
 is deliberate - it is what stops a stray blob being stored - so do not add a
 field here without adding it to both.
 
-`delivery_status` is not decorative. Module 8 only starts measuring recovery
-from certain statuses, and they differ by intervention type:
+`delivered_at` is what Module 8 measures from, and this module is the only
+thing that sets it. It is written once, at the moment the intervention reaches
+the learner, and never moves again. If it is never set, the intervention is
+invisible to every recovery metric - so the delivery lifecycle is not
+bookkeeping, it is the whole measurement.
+
+Which status counts as "reached the learner" differs by intervention type:
 
     automatic    (simplify_content, bullet_summary)
                  displayed | accepted | completed
@@ -22,9 +27,9 @@ from certain statuses, and they differ by intervention type:
                  accepted | completed
 
 `offered` is in neither list, and that is correct - an intervention offered but
-never displayed never reached the learner. An event left at `offered` is
-invisible to every recovery metric, so the lifecycle has to be advanced as
-delivery actually happens rather than fired once and forgotten.
+never displayed never reached the learner. An event left at `offered` never
+gets a `delivered_at`, so the lifecycle has to be advanced as delivery actually
+happens rather than fired once and forgotten.
 """
 
 import uuid
@@ -105,15 +110,9 @@ def can_advance(current: str, proposed: str) -> bool:
     return proposed in ALLOWED_TRANSITIONS.get(current, ())
 
 
-def is_anchored(event: dict) -> bool:
-    """
-    Whether this event's timestamp has already become a recovery anchor.
-
-    See `advance` for why that matters.
-    """
-    return starts_recovery_measurement(
-        event.get("intervention_type", ""), event.get("delivery_status", "")
-    )
+def is_delivered(event: dict) -> bool:
+    """Whether delivery has already been recorded, and so must not move."""
+    return bool(event.get("delivered_at"))
 
 
 def build_intervention_event(
@@ -167,10 +166,16 @@ def build_intervention_event(
     if model_version:
         event["model_version"] = model_version
 
-    # decision.sequence_id / step_index are deliberately NOT emitted. The
-    # contract does not accept them yet (issue #45) and additionalProperties
-    # is false, so sending them would fail validation. Add here when the
-    # schema and Module 8's allowlist both accept them.
+    # Carried when a decider sets them. Nothing does yet - sequencing belongs
+    # to Module 6 - but the contract accepts them as of #54, so a sequencing
+    # decider needs no change here.
+    if decision.sequence_id:
+        event["sequence_id"] = decision.sequence_id
+    if decision.step_index is not None:
+        event["step_index"] = decision.step_index
+
+    # `delivered_at` is deliberately absent on a new event. It is set by
+    # advance(), once, when delivery actually happens.
 
     return event
 
@@ -183,32 +188,30 @@ def advance(event: dict, delivery_status: str, *, timestamp: str = None) -> dict
     intervention id and expects an idempotent record; mutating in place makes
     it ambiguous which version was persisted.
 
-    The timestamp stops moving once it becomes a recovery anchor
-    ------------------------------------------------------------
-    This is a workaround, not the design. Issue #46 asks for a `delivered_at`
-    field on the contract, set once at the moment the intervention reached the
-    learner and never moved. When that lands, set `delivered_at` here instead
-    and delete the freezing below - `timestamp` then goes back to meaning the
-    moment the intervention was offered, which is what it says it is.
+    `delivered_at` is written once and never moves
+    ----------------------------------------------
+    Module 8's `_recovery_start_time` reads exactly one field to decide when to
+    start measuring: `delivered_at`. There is no fallback - an intervention
+    without it is not measured at all - so setting it is this module's job and
+    nobody else's.
 
-    Until then there is only one timestamp and it has to be the anchor:
-    There is one stored document per intervention, and Module 8's
-    `_recovery_start_time` reads a single field from it - `timestamp` - and
-    treats that as the moment the intervention reached the learner. It only
-    does so when `delivery_status` is recovery-eligible for that type.
+    It is written at the first status that counts as reaching the learner for
+    that intervention type, which comes straight out of RECOVERY_ELIGIBLE
+    rather than being a second copy of the same rule. For an automatic type
+    that is `displayed`; for a learner-initiated one `displayed` is not enough,
+    so it waits for `accepted`.
 
-    So refreshing the timestamp on every transition would be wrong in a way
-    that produces no error anywhere. An intervention going
-    displayed -> accepted -> completed would end up stored with its completion
-    time, and recovery would be measured from a window that starts minutes
-    after the learner actually saw anything. The number would look plausible
-    and mean nothing.
+    Once set it is never rewritten, including by a repeated status report from
+    a retrying client. That is the whole point of the field: it is the one
+    fixed fact in a lifecycle that keeps moving. `delivery_status` carries on
+    to `dismissed` or `completed` afterwards without disturbing it, which is
+    what #46 was about - an intervention that helped and was later dismissed
+    used to lose its measurement entirely.
 
-    The timestamp therefore advances while the event is not yet
-    recovery-eligible and freezes at the first status that is. For an automatic
-    type that is `displayed`; for a learner-initiated one `displayed` is not
-    eligible, so it keeps moving until `accepted`. That falls out of
-    RECOVERY_ELIGIBLE rather than being a second copy of the same rule.
+    `timestamp` stays where it was put: the moment the intervention was
+    offered. It used to be dragged along as a stand-in anchor, which is what
+    made detect-to-deliver latency impossible to compute. That workaround is
+    gone.
     """
     if delivery_status not in DELIVERY_STATUSES:
         raise ValueError(f"unknown delivery_status: {delivery_status}")
@@ -218,9 +221,12 @@ def advance(event: dict, delivery_status: str, *, timestamp: str = None) -> dict
         raise InvalidTransition(f"cannot go from {current} to {delivery_status}")
 
     updated = dict(event)
-    if not is_anchored(event):
-        updated["timestamp"] = timestamp or datetime.now(timezone.utc).isoformat()
     updated["delivery_status"] = delivery_status
+
+    if not is_delivered(updated) and starts_recovery_measurement(
+        updated.get("intervention_type", ""), delivery_status
+    ):
+        updated["delivered_at"] = timestamp or datetime.now(timezone.utc).isoformat()
 
     # A dismissal is a delivery fact, not a judgement about whether the
     # intervention would have worked, so it is safe to record here while

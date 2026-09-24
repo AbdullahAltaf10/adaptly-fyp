@@ -294,11 +294,10 @@ def test_event_has_exactly_the_fields_the_contract_allows():
     assert set(event) <= allowed, f"not in contract: {set(event) - allowed}"
 
 
-def test_sequence_fields_are_not_emitted_until_the_contract_accepts_them():
+def test_sequence_fields_travel_when_a_decider_sets_them():
     """
-    Decision carries sequence_id/step_index for a future sequencing decider,
-    but the contract does not have them yet (issue #45). Emitting them would
-    fail validation.
+    Nothing sets them yet - sequencing is Module 6's job - but the contract
+    accepts them as of #54, so a sequencing decider needs no change here.
     """
     decision = Decision(
         intervention_type=SIMPLIFY_CONTENT, reason_code="struggling",
@@ -308,8 +307,21 @@ def test_sequence_fields_are_not_emitted_until_the_contract_accepts_them():
         decision=decision, user_id="u", session_id="s",
         triggering_engagement_state="struggling",
     )
+    assert event["sequence_id"] == "seq-1"
+    assert event["step_index"] == 2
+
+
+def test_sequence_fields_are_omitted_when_nothing_sets_them():
+    """Which is every decision today. Absent rather than null, like the other
+    optional fields, so stored events stay small and readable."""
+    decision = DefaultPolicy().decide(signals(state="fatigued"))
+    event = contracts.build_intervention_event(
+        decision=decision, user_id="u", session_id="s",
+        triggering_engagement_state="fatigued",
+    )
     assert "sequence_id" not in event
     assert "step_index" not in event
+    assert "delivered_at" not in event, "an offer has not been delivered"
 
 
 def test_new_events_claim_no_outcome():

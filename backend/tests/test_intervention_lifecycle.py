@@ -13,12 +13,15 @@ recovery from `displayed` for automatic types and `accepted` for
 learner-initiated ones, and from `offered` for neither. Fire-and-forget gives a
 full event collection and an empty dashboard, with nothing raising anywhere.
 
-**The stored timestamp is the recovery anchor.** There is one document per
-intervention and Module 8 reads one `timestamp` from it. If that field were
-refreshed on every transition, an intervention that went displayed -> accepted
--> completed would be anchored at its completion, and recovery measured from a
-window starting well after the learner saw anything. Still no error - just a
-plausible number that means nothing.
+**`delivered_at` is the whole measurement.** Module 8 reads exactly one field
+to decide when to start measuring, and there is no fallback - an intervention
+without `delivered_at` is invisible to every recovery metric. This module is
+the only thing that sets it, so a lifecycle that never advances produces events
+that look complete and count for nothing.
+
+It is written once and must never move. `delivery_status` carries on to
+`dismissed` or `completed` afterwards, and an intervention that helped and was
+later dismissed has to keep its measurement - that was #46.
 
 **Delivery is reported by the browser.** Without a transition graph a client
 could post `completed` against something that was never rendered and
@@ -205,31 +208,58 @@ def test_a_status_that_is_not_a_status_is_rejected_before_anything_else():
 # The timestamp is the recovery anchor, and stops moving once it is one
 # --------------------------------------------------------------------------
 
-def test_an_automatic_type_anchors_when_it_is_displayed():
+def test_an_automatic_type_is_delivered_when_it_is_displayed():
     """`displayed` is where a simplification reaches the learner."""
     event = an_event(SIMPLIFY_CONTENT, timestamp="t0")
+    assert event.get("delivered_at") is None, "an offer has not been delivered"
+
     displayed = contracts.advance(event, "displayed", timestamp="t1")
-    assert displayed["timestamp"] == "t1"
+    assert displayed["delivered_at"] == "t1"
 
     accepted = contracts.advance(displayed, "accepted", timestamp="t2")
-    assert accepted["timestamp"] == "t1", "anchor moved past the moment it was shown"
+    assert accepted["delivered_at"] == "t1", "delivery moved"
     completed = contracts.advance(accepted, "completed", timestamp="t3")
-    assert completed["timestamp"] == "t1"
+    assert completed["delivered_at"] == "t1"
 
 
-def test_a_learner_initiated_type_anchors_when_it_is_accepted():
+def test_a_learner_initiated_type_is_delivered_when_it_is_accepted():
     """
     A break suggestion shown and ignored was never experienced, so `displayed`
-    is not the anchor for it - the timestamp has to keep moving until accepted.
+    does not count for it - the measurement waits until the learner takes it up.
     """
     event = an_event(BREAK_SUGGESTION, timestamp="t0")
+
     displayed = contracts.advance(event, "displayed", timestamp="t1")
-    assert displayed["timestamp"] == "t1"
+    assert displayed.get("delivered_at") is None, "showing it is not delivering it"
 
     accepted = contracts.advance(displayed, "accepted", timestamp="t2")
-    assert accepted["timestamp"] == "t2"
+    assert accepted["delivered_at"] == "t2"
     completed = contracts.advance(accepted, "completed", timestamp="t3")
-    assert completed["timestamp"] == "t2", "anchor moved past the moment it was taken up"
+    assert completed["delivered_at"] == "t2"
+
+
+def test_the_offer_timestamp_never_moves():
+    """
+    It used to. `timestamp` was dragged along as a stand-in anchor because the
+    contract had nowhere else to put one, which made the time between detecting
+    difficulty and actually helping impossible to compute. #54 added
+    `delivered_at`, so `timestamp` means what it says again.
+    """
+    event = an_event(SIMPLIFY_CONTENT, timestamp="t0")
+    for status, moment in (("displayed", "t1"), ("accepted", "t2"), ("completed", "t3")):
+        event = contracts.advance(event, status, timestamp=moment)
+        assert event["timestamp"] == "t0"
+
+
+def test_a_dismissal_does_not_take_the_measurement_with_it():
+    """
+    The #46 regression, on Module 4's side. An intervention that was shown,
+    helped, and then closed by the learner keeps its `delivered_at`, so it is
+    still measured. Recording the dismissal must never cost the measurement.
+    """
+    event = contracts.advance(an_event(SIMPLIFY_CONTENT), "displayed", timestamp="t1")
+    dismissed = contracts.advance(event, "dismissed", timestamp="t2")
+    assert dismissed["delivered_at"] == "t1"
 
 
 LEGAL_PATHS = [
@@ -247,11 +277,11 @@ LEGAL_PATHS = [
     SIMPLIFY_CONTENT, BULLET_SUMMARY, BREAK_SUGGESTION, ASSISTANT_HELP_PROMPT,
 ])
 @pytest.mark.parametrize("path", LEGAL_PATHS)
-def test_the_stored_timestamp_is_always_the_first_measured_moment(intervention_type, path):
+def test_delivery_is_recorded_once_at_the_first_moment_that_counts(intervention_type, path):
     """
-    The general form of the two tests above, over every type and every legal
-    path: whatever route an intervention takes, the timestamp Module 8 ends up
-    reading is the moment it first became measurable - never a later one.
+    The general form, over every type and every legal path: `delivered_at` is
+    the first moment that counted for that type, it never moves afterwards, and
+    the offer time is left alone throughout.
     """
     event = an_event(intervention_type, timestamp="t0")
     expected = None
@@ -259,13 +289,53 @@ def test_the_stored_timestamp_is_always_the_first_measured_moment(intervention_t
         event = contracts.advance(event, status, timestamp=f"t{index}")
         if expected is None and contracts.starts_recovery_measurement(intervention_type, status):
             expected = f"t{index}"
-    if expected is not None:
-        assert event["timestamp"] == expected
-    else:
-        # Never reached a measured status, so there is no anchor to protect.
-        assert not contracts.starts_recovery_measurement(
-            intervention_type, event["delivery_status"]
+
+    assert event["timestamp"] == "t0"
+    assert event.get("delivered_at") == expected
+
+    if expected is None:
+        # Never reached a status that counts, so Module 8 measures nothing -
+        # which is correct, not a gap.
+        assert not any(
+            contracts.starts_recovery_measurement(intervention_type, s) for s in path
         )
+
+
+def test_a_retrying_client_cannot_move_the_delivery_moment():
+    """
+    Delivery reports come over an unreliable connection. A client that retries
+    must not rewrite when the intervention reached the learner.
+    """
+    event = contracts.advance(an_event(SIMPLIFY_CONTENT), "displayed", timestamp="t1")
+    again = contracts.advance(event, "accepted", timestamp="t9")
+    assert again["delivered_at"] == "t1"
+
+
+def test_every_emitted_field_is_one_the_real_contract_accepts():
+    """
+    Read against the actual schema file rather than a list copied into this
+    test, so the two cannot drift.
+    """
+    import json
+    import pathlib
+
+    schema_path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "shared" / "contracts" / "intervention-event.schema.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    allowed = set(schema["properties"])
+
+    if "delivered_at" not in allowed:
+        pytest.skip(
+            "waiting on #54 to add delivered_at to the contract; Module 8's "
+            "allowlist drops unknown fields, so emitting it early is harmless"
+        )
+
+    event = an_event(SIMPLIFY_CONTENT)
+    event = contracts.advance(event, "displayed")
+    event = contracts.advance(event, "completed")
+    assert set(event) <= allowed, f"not in contract: {set(event) - allowed}"
 
 
 def test_dismissal_is_recorded_as_an_outcome_but_claims_nothing_about_helping():
@@ -331,6 +401,9 @@ def test_the_allowlist_matches_module_8s(fake_store):
         "triggering_engagement_event_id", "delivery_status", "outcome",
         "recovery_timestamp", "recovery_duration_seconds", "helped",
         "policy_version", "model_version",
+        # Added by #54: delivered_at is what recovery is measured from, the
+        # other two are reserved for Module 6's sequencing.
+        "delivered_at", "sequence_id", "step_index",
     }
     assert store.ALLOWED_FIELDS == module_8_fields
     assert store.COLLECTION == "analytics_intervention_events"

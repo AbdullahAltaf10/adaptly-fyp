@@ -75,10 +75,15 @@ export function useIntervention({ intervention, sessionId } = {}) {
     if (!offered?.intervention_id) return undefined;
 
     // A new intervention arriving while one is still open does NOT dismiss the
-    // old one. Two reasons: the learner did not dismiss it, so saying they did
-    // would be false; and for an automatic type already at `displayed`, moving
-    // it to `dismissed` currently removes it from Module 8's recovery metrics
-    // altogether (issue #46). Leaving it where it is keeps the record honest.
+    // old one. The learner did not dismiss it, so recording that they did
+    // would be false, and `dismissed` is the one status that also writes an
+    // outcome.
+    //
+    // This used to have a second reason - dismissing an automatic type after
+    // it was displayed removed it from Module 8's recovery metrics entirely.
+    // #54 fixed that: `delivered_at` is written once and a later dismissal no
+    // longer costs the measurement. Only the honesty reason is left, and it is
+    // enough on its own.
     if (currentRef.current?.intervention_id === offered.intervention_id) {
       return undefined;
     }

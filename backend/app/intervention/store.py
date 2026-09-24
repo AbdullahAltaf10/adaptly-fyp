@@ -68,6 +68,12 @@ ALLOWED_FIELDS = {
     "helped",
     "policy_version",
     "model_version",
+    # Added by #54. `delivered_at` is the field Module 8 measures recovery
+    # from; the other two are reserved for Module 6's sequencing and nothing
+    # sets them yet.
+    "delivered_at",
+    "sequence_id",
+    "step_index",
 }
 
 
