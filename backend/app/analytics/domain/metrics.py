@@ -68,24 +68,6 @@ class MetricConfig:
     recovery_confirmation_samples: int = 2
     minimum_event_coverage_rate: float = 0.8
     excessive_unknown_rate: float = 0.2
-    automatic_intervention_types: tuple[str, ...] = (
-        "simplify_content",
-        "bullet_summary",
-    )
-    learner_initiated_intervention_types: tuple[str, ...] = (
-        "break_suggestion",
-        "assistant_help_prompt",
-        "other",
-    )
-    automatic_recovery_start_statuses: tuple[str, ...] = (
-        "displayed",
-        "accepted",
-        "completed",
-    )
-    learner_recovery_start_statuses: tuple[str, ...] = (
-        "accepted",
-        "completed",
-    )
 
     def __post_init__(self) -> None:
         positive_fields = (
@@ -492,23 +474,24 @@ def _eligible_interventions(
 def _recovery_start_time(
     intervention: Mapping[str, Any], config: MetricConfig
 ) -> datetime | None:
-    """Return the versioned lifecycle point from which recovery is observed.
+    """Return the moment the intervention actually reached the learner.
 
-    Automatic content adaptations can be experienced once displayed. Supports that
-    require learner action become eligible only after acceptance or completion.
+    ``delivered_at`` is recorded once, when delivery happens, and never
+    changes afterward. ``delivery_status`` keeps moving through its
+    lifecycle (accepted / dismissed / completed / ...) after that point, so
+    branching on it here used to mean an intervention that helped and was
+    later dismissed silently lost its recovery eligibility (Issue #46) --
+    and the interventions most likely to end up "dismissed" are exactly the
+    ones that did *not* help, so that bug biased ``recovery_rate`` upward.
+    There is deliberately no fallback to the old status-based logic: if
+    delivery was never confirmed, there is nothing to measure recovery
+    from, so this correctly returns ``None``.
     """
 
-    intervention_type = intervention.get("intervention_type")
-    status = intervention.get("delivery_status")
-    if intervention_type in config.automatic_intervention_types:
-        eligible_statuses = config.automatic_recovery_start_statuses
-    elif intervention_type in config.learner_initiated_intervention_types:
-        eligible_statuses = config.learner_recovery_start_statuses
-    else:
+    delivered_at = intervention.get("delivered_at")
+    if delivered_at is None:
         return None
-    if status not in eligible_statuses:
-        return None
-    return _parse_datetime(intervention["timestamp"])
+    return _parse_datetime(delivered_at)
 
 
 def _observed_recovery(

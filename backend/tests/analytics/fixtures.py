@@ -68,7 +68,19 @@ def intervention(
     outcome: str = "not_observed",
     helped: bool | None = None,
     recovery_offset: int | None = None,
+    delivered: bool = True,
+    delivered_offset: int | None = None,
+    sequence_id: str | None = None,
+    step_index: int | None = None,
 ) -> dict[str, Any]:
+    """``delivered`` defaults to True (delivered at ``offset_seconds``,
+    unless ``delivered_offset`` says otherwise) so existing fixtures that
+    don't care about delivery timing keep behaving as before. Pass
+    ``delivered=False`` for an intervention that never reached the learner
+    (e.g. still "offered") -- recovery eligibility depends only on
+    ``delivered_at``, never on ``delivery_status`` (see Issue #46).
+    """
+
     item: dict[str, Any] = {
         "schema_version": "1.0",
         "intervention_id": f"intervention-{intervention_number}",
@@ -87,7 +99,14 @@ def intervention(
         "helped": helped,
         "policy_version": "1.0",
         "model_version": None,
+        "sequence_id": sequence_id,
+        "step_index": step_index,
     }
+    item["delivered_at"] = (
+        timestamp(delivered_offset if delivered_offset is not None else offset_seconds)
+        if delivered
+        else None
+    )
     if recovery_offset is not None:
         item["recovery_timestamp"] = timestamp(recovery_offset)
         item["recovery_duration_seconds"] = recovery_offset - offset_seconds

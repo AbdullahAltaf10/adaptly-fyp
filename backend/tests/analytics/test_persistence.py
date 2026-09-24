@@ -115,6 +115,31 @@ class InterventionEventPersistenceTests(unittest.TestCase):
 
         self.assertEqual(self.repo.count_for_session("session-1"), 1)
 
+    def test_sequence_id_and_step_index_round_trip(self) -> None:
+        """Issue #45: the allowlist must be updated alongside the contract,
+        or these fields get silently dropped on write."""
+        event = intervention(
+            20,
+            intervention_number=1,
+            sequence_id="escalation-1",
+            step_index=2,
+        )
+
+        self.repo.insert_events([event])
+        stored = self.repo.get("intervention-1")
+
+        self.assertEqual(stored["sequence_id"], "escalation-1")
+        self.assertEqual(stored["step_index"], 2)
+
+    def test_delivered_at_round_trips(self) -> None:
+        event = intervention(20, intervention_number=1, delivered=True)
+
+        self.repo.insert_events([event])
+        stored = self.repo.get("intervention-1")
+
+        self.assertEqual(stored["delivered_at"], event["delivered_at"])
+        self.assertIsNotNone(stored["delivered_at"])
+
 
 class AssistantEventPersistenceTests(unittest.TestCase):
     def setUp(self) -> None:

@@ -376,59 +376,87 @@ class RecoveryTests(unittest.TestCase):
         self.assertTrue(recoveries[1]["recovered"])
         self.assertEqual(recoveries[1]["recovery_duration_seconds"], 5.0)
 
-    def test_automatic_displayed_intervention_is_eligible(self) -> None:
-        interventions = [
-            intervention(
-                10,
-                intervention_number=1,
-                intervention_type="simplify_content",
-                delivery_status="displayed",
-                recovery_offset=20,
-            )
+    def test_delivered_intervention_is_eligible_regardless_of_type(self) -> None:
+        """Eligibility depends only on delivered_at now, not on the old
+        automatic-vs-learner-initiated intervention_type split (Issue #46
+        removed that distinction along with the status-tuple logic it fed)."""
+        for intervention_type in ("simplify_content", "assistant_help_prompt"):
+            interventions = [
+                intervention(
+                    10,
+                    intervention_number=1,
+                    intervention_type=intervention_type,
+                    delivery_status="displayed",
+                    recovery_offset=20,
+                )
+            ]
+            recoveries = calculate_recoveries(interventions, [], timestamp(60))
+            self.assertEqual(len(recoveries), 1)
+            self.assertEqual(recoveries[0]["recovery_duration_seconds"], 10.0)
+
+    def test_recovery_outcome_is_identical_regardless_of_final_delivery_status(
+        self,
+    ) -> None:
+        """Issue #46 regression.
+
+        Before this fix, an intervention that was delivered and helped but
+        ended up with delivery_status "dismissed" was silently excluded from
+        recovery tracking, while an otherwise-identical intervention ending
+        in "completed" was included -- even though both equally reached the
+        learner. That biased recovery_rate upward, since the interventions
+        most likely to end up dismissed are the ones that did not help.
+        Eligibility, recovery count, and recovery_rate must now be identical
+        across every terminal delivery_status, as long as delivered_at is
+        set.
+        """
+        engagement_events = [
+            engagement(0, "struggling", event_number=1),
+            engagement(15, "focused", event_number=2),
+            engagement(20, "focused", event_number=3),
         ]
-        recoveries = calculate_recoveries(interventions, [], timestamp(60))
-        self.assertEqual(len(recoveries), 1)
-        self.assertEqual(recoveries[0]["recovery_duration_seconds"], 10.0)
 
-    def test_learner_interaction_requires_acceptance_or_completion(self) -> None:
-        displayed = intervention(
-            5,
-            intervention_number=1,
-            intervention_type="assistant_help_prompt",
-            delivery_status="displayed",
-        )
-        accepted = intervention(
-            10,
-            intervention_number=2,
-            intervention_type="assistant_help_prompt",
-            delivery_status="accepted",
-        )
-        completed = intervention(
-            20,
-            intervention_number=3,
-            intervention_type="break_suggestion",
-            delivery_status="completed",
-        )
-        recoveries = calculate_recoveries(
-            [displayed, accepted, completed], [], timestamp(60)
-        )
-        self.assertEqual(
-            [item["intervention_id"] for item in recoveries],
-            ["intervention-2", "intervention-3"],
-        )
+        results_by_status = {}
+        for status in ("displayed", "accepted", "completed", "dismissed", "failed"):
+            interventions = [
+                intervention(
+                    0, intervention_number=1, delivery_status=status, delivered=True
+                )
+            ]
+            recoveries = calculate_recoveries(
+                interventions, engagement_events, timestamp(60)
+            )
+            metrics = calculate_recovery_metrics(recoveries)
+            results_by_status[status] = (
+                len(recoveries),
+                recoveries[0]["recovered"] if recoveries else None,
+                recoveries[0]["recovery_duration_seconds"] if recoveries else None,
+                metrics["recovery_rate"],
+            )
 
-    def test_ineligible_terminal_and_pre_display_states_are_excluded(self) -> None:
+        self.assertEqual(len(set(results_by_status.values())), 1)
+        eligible_count, recovered, duration, rate = next(iter(results_by_status.values()))
+        self.assertEqual(eligible_count, 1)
+        self.assertTrue(recovered)
+        self.assertEqual(duration, 15.0)
+        self.assertEqual(rate, 1.0)
+
+    def test_never_delivered_intervention_is_still_not_eligible(self) -> None:
+        """Must not change: an intervention that never reached the learner
+        (delivered_at unset, e.g. still "offered") stays ineligible for
+        recovery tracking, regardless of delivery_status."""
+        engagement_events = [engagement(15, "focused", event_number=1)]
         interventions = [
             intervention(
                 index * 5,
                 intervention_number=index,
                 delivery_status=status,
+                delivered=False,
             )
-            for index, status in enumerate(
-                ("offered", "dismissed", "failed"), start=1
-            )
+            for index, status in enumerate(("offered", "failed", "dismissed"), start=1)
         ]
-        self.assertEqual(calculate_recoveries(interventions, [], timestamp(60)), [])
+        recoveries = calculate_recoveries(interventions, engagement_events, timestamp(60))
+        self.assertEqual(recoveries, [])
+        self.assertIsNone(calculate_recovery_metrics(recoveries)["recovery_rate"])
 
     def test_recovery_window_boundary_is_inclusive_but_later_evidence_is_not(self) -> None:
         config = MetricConfig(recovery_window_seconds=20)
@@ -525,6 +553,30 @@ class InterventionTests(unittest.TestCase):
             if item["intervention_type"] == "simplify_content"
         )
         self.assertEqual(simplify["effectiveness_rate"], 0.5)
+
+    def test_new_optional_fields_accept_null_present_or_absent(self) -> None:
+        """Issues #45/#46: delivered_at, sequence_id, and step_index must
+        stay optional and nullable so no existing producer or fixture that
+        predates them has to change."""
+        schema_path = (
+            REPOSITORY_ROOT / "shared" / "contracts" / "intervention-event.schema.json"
+        )
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        base = intervention(0, intervention_number=1)
+
+        with_nulls = dict(base, delivered_at=None, sequence_id=None, step_index=None)
+        assert_schema_match(with_nulls, schema)
+
+        with_values = dict(
+            base, delivered_at=timestamp(0), sequence_id="escalation-1", step_index=2
+        )
+        assert_schema_match(with_values, schema)
+
+        entirely_absent = dict(base)
+        del entirely_absent["delivered_at"]
+        del entirely_absent["sequence_id"]
+        del entirely_absent["step_index"]
+        assert_schema_match(entirely_absent, schema)
 
 
 class AssistantUsageTests(unittest.TestCase):

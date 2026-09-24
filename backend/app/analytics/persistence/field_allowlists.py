@@ -73,6 +73,9 @@ INTERVENTION_EVENT_FIELDS = {
     "helped",
     "policy_version",
     "model_version",
+    "delivered_at",
+    "sequence_id",
+    "step_index",
 }
 
 ASSISTANT_EVENT_FIELDS = {
