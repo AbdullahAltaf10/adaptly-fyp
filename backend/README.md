@@ -22,6 +22,8 @@ venv\Scripts\Activate.ps1     # Windows PowerShell
 pip install -r requirements.txt
 ```
 
+To run tests, also install dev dependencies: `pip install -r backend/requirements-dev.txt`
+
 The virtual environment must be activated in **every new terminal session**.
 
 > Installing TensorFlow pulls roughly 500 MB of dependencies, so the first
