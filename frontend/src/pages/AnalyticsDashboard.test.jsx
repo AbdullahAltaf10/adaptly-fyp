@@ -98,6 +98,27 @@ describe("AnalyticsDashboard", () => {
     expect(
       await screen.findByText(/no extra support was offered.*on track throughout/i)
     ).toBeInTheDocument();
+    // The support-log's own empty state sits right below the totals section
+    // and must read as a distinct, non-duplicated message (Issue #31).
+    expect(
+      screen.getByText(/nothing logged here.*no individual support events/i)
+    ).toBeInTheDocument();
+  });
+
+  it("renders the engagement timeline and support log for a session with logged support (Issue #31)", async () => {
+    render(
+      <AnalyticsDashboard
+        session={{ sessionId: "session-normal", status: "completed" }}
+        fetchAnalytics={resolvedFetcher(MOCK_SCENARIOS.NORMAL_COMPLETED_SESSION)}
+      />
+    );
+
+    await screen.findByText("Intro to Cellular Respiration");
+
+    expect(screen.getByRole("heading", { name: /session timeline/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /support log/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/break suggested/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/helped you get back on track/i)).toBeInTheDocument();
   });
 
   it('shows "Not available" rather than 0 for missing metrics', async () => {

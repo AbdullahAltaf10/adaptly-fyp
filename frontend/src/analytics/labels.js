@@ -50,3 +50,33 @@ export const SESSION_STATUS_LABELS = {
   completed: "Completed",
   abandoned: "Ended early",
 };
+
+/**
+ * Delivery status for one individual piece of support (Issue #31's
+ * intervention log), from shared/contracts/intervention-event.schema.json.
+ * "failed" here means the support itself didn't display/complete — it is
+ * never used to describe the learner.
+ */
+export const DELIVERY_STATUS_LABELS = {
+  offered: "Offered",
+  displayed: "Shown",
+  accepted: "Accepted",
+  dismissed: "Dismissed",
+  completed: "Completed",
+  failed: "Didn't load",
+};
+
+/**
+ * Outcome for one individual piece of support. Calm, non-judgmental
+ * phrasing per CLAUDE.md 6.5 — never "failed"/"ineffective" language aimed
+ * at the learner.
+ */
+export const OUTCOME_LABELS = {
+  not_observed: "Outcome not observed",
+  recovered: "Helped you get back on track",
+  improved: "Seemed to help",
+  unchanged: "Didn't seem to change things",
+  worsened: "Didn't help this time",
+  dismissed: "Dismissed before it could help",
+  unknown: "Not enough information",
+};

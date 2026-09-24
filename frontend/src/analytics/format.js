@@ -38,6 +38,21 @@ export function formatCount(value) {
   return String(value);
 }
 
+/**
+ * The session's start time, derived from `completed_at` and
+ * `duration_seconds` (both required on every session summary) rather than
+ * from `timeline_segments[0]` (which can be missing, sparse, or start after
+ * a real gap) — this is the one basis `EngagementTimeline` and
+ * `InterventionLog` share so a support event lines up with the same point
+ * on both. Returns `null` if either input is missing/invalid.
+ */
+export function computeSessionStartIso(summary) {
+  if (!summary?.completed_at || summary?.duration_seconds == null) return null;
+  const completedMs = new Date(summary.completed_at).getTime();
+  if (Number.isNaN(completedMs)) return null;
+  return new Date(completedMs - summary.duration_seconds * 1000).toISOString();
+}
+
 export function formatDate(isoString) {
   if (!isoString) return NOT_AVAILABLE;
   const date = new Date(isoString);
