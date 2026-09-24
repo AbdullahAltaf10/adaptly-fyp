@@ -29,7 +29,7 @@ level information.
 | 27 | Add Module 8 analytics persistence and indexes | ✅ Done | [issue-27-persistence.md](issue-27-persistence.md) |
 | 28 | Implement Module 8 session finalization and summary computation | ✅ Done | [issue-28-finalization.md](issue-28-finalization.md) |
 | 29 | Build Module 8 analytics and session history APIs | ✅ Done | [issue-29-apis.md](issue-29-apis.md) |
-| 30 | Build Module 8 post-session analytics dashboard shell | ⬜ Not started | — |
+| 30 | Build Module 8 post-session analytics dashboard shell | ✅ Done | [issue-30-dashboard-shell.md](issue-30-dashboard-shell.md) |
 | 31 | Add Module 8 engagement timeline and intervention log | ⬜ Not started | — |
 | 32 | Implement Module 8 Gemini insight report and fallback | ⬜ Not started | — |
 | 33 | Build Module 8 multi-session learning profile | ⬜ Not started | — |
