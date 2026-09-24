@@ -8,7 +8,7 @@ document.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from . import collections
 from .base import format_timestamp, strip_storage_id, utc_now
@@ -35,6 +35,28 @@ class SessionRepository:
             },
             upsert=True,
         )
+
+    def try_transition_to_completed(
+        self, session: Mapping[str, Any], *, expected_statuses: Iterable[str], now: Any = None
+    ) -> bool:
+        """Atomically transition a session to completed, but only if its status
+        is still one of expected_statuses at write time. Returns True if this
+        call performed the transition, False if the session was no longer in
+        an eligible status (e.g. a concurrent finalize_session call already
+        completed it first).
+        """
+        now_str = format_timestamp(now or utc_now())
+        document = filtered(dict(session), SESSION_FIELDS)
+        document.pop("created_at", None)
+        document["updated_at"] = now_str
+        result = self._collection.update_one(
+            {"_id": session["session_id"], "status": {"$in": list(expected_statuses)}},
+            {
+                "$set": document,
+                "$setOnInsert": {"created_at": now_str},
+            },
+        )
+        return result.matched_count > 0
 
     def get(self, session_id: str) -> dict[str, Any] | None:
         return strip_storage_id(self._collection.find_one({"_id": session_id}))

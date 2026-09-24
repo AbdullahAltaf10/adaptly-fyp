@@ -13,6 +13,7 @@ from typing import Any
 import mongomock
 
 from backend.app.analytics.service.finalization import (
+    ELIGIBLE_STATUSES,
     AnalyticsRepositories,
     SessionAccessDeniedError,
     SessionNotFoundError,
@@ -302,6 +303,28 @@ class FailureHandlingTests(unittest.TestCase):
         retry = finalize_session("session-1", "user-1", repositories, now=timestamp(60))
 
         self.assertEqual(retry.outcome, "finalized")
+
+
+class ConcurrencyTests(unittest.TestCase):
+    def test_second_concurrent_transition_loses_the_race(self) -> None:
+        repositories = _repositories()
+        session_data = _seed_scenario(repositories, "normal_completed_session")
+        # Mirrors what finalize_session builds as `finalized_session` before
+        # calling try_transition_to_completed: the same session, with status
+        # already flipped to "completed". Two "concurrent" callers would each
+        # compute this independently from the same pre-transition read.
+        completed_session_data = dict(session_data, status="completed")
+
+        first = repositories.sessions.try_transition_to_completed(
+            completed_session_data, expected_statuses=ELIGIBLE_STATUSES, now=timestamp(60)
+        )
+        second = repositories.sessions.try_transition_to_completed(
+            completed_session_data, expected_statuses=ELIGIBLE_STATUSES, now=timestamp(60)
+        )
+
+        self.assertTrue(first)
+        self.assertFalse(second)
+        self.assertEqual(repositories.sessions.get("session-1")["status"], "completed")
 
 
 if __name__ == "__main__":

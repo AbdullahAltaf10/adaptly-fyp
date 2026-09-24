@@ -252,9 +252,31 @@ def finalize_session(
         )
 
     if status in ELIGIBLE_STATUSES:
-        repositories.sessions.upsert_session(
-            finalized_session, now=finalized_session["ended_at"]
+        transitioned = repositories.sessions.try_transition_to_completed(
+            finalized_session,
+            expected_statuses=ELIGIBLE_STATUSES,
+            now=finalized_session["ended_at"],
         )
+        if not transitioned:
+            # Lost the race: another concurrent finalize_session call already
+            # completed this session between our read and this write. Treat
+            # it like the already-completed path rather than overwriting a
+            # possibly-different duration computed by the winning call.
+            refreshed = repositories.sessions.get(session_id)
+            existing = repositories.session_analytics.get(
+                session_id, config.metric_version
+            )
+            if existing is not None:
+                return FinalizationResult(
+                    outcome="already_finalized",
+                    session=refreshed,
+                    summary=existing["summary"],
+                )
+            # Extremely unlikely: the winning call's summary write hasn't
+            # landed yet. Fall through and save our own computed summary -
+            # session_analytics.save is idempotent, keyed by
+            # (session_id, metric_version), so this cannot duplicate.
+
     repositories.session_analytics.save(
         summary,
         insight_report_status="pending",
