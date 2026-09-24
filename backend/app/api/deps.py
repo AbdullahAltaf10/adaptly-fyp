@@ -1,42 +1,20 @@
 """Shared FastAPI dependency for resolving the authenticated caller.
 
-TEMPORARY — replace when Module 1 auth is merged (see Issue #34 for the real
-integration). Real authentication (Module 1 — Learner Profile & Access
-Management, Firebase-based per ``backend/README.md``) has not been merged
-into ``develop`` yet. Rather than block Module 8's API work on that, or
-hard-code something risky, every endpoint that needs "who is the logged-in
-learner" resolves it through this ONE dependency via FastAPI's ``Depends()``.
-Swapping in real Firebase-token verification later means changing only this
-function's body — no endpoint code changes, and in particular no endpoint
-ever accepts ``user_id`` as a client-supplied value (query param, body field,
-etc.); it always comes from here.
+Wraps Module 1's real Firebase-based authentication
+(``app.auth.dependencies.get_current_user``, merged into ``develop`` in #36)
+and extracts the caller's uid. Every Module 8 endpoint resolves "who is the
+logged-in learner" through this ONE dependency via FastAPI's ``Depends()``;
+no endpoint ever accepts ``user_id`` as a client-supplied value (query
+param, body field, etc.) — it always comes from here. See Issue #52.
 """
 
 from __future__ import annotations
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends
 
-DEV_USER_HEADER = "X-Dev-User-Id"
+from app.auth.dependencies import get_current_user
 
 
-def get_current_user_id(
-    x_dev_user_id: str | None = Header(default=None, alias=DEV_USER_HEADER),
-) -> str:
-    """TEMPORARY placeholder auth — reads a dev-only header, not a real credential.
-
-    This must never be mistaken for real authentication. It exists purely so
-    the API layer has the right shape (one swappable dependency, never a
-    trusted client-supplied user id) while Module 1's real auth is still
-    unmerged.
-    """
-
-    if not x_dev_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=(
-                f"Missing '{DEV_USER_HEADER}' header. This is a temporary "
-                "development placeholder for authentication, not real auth "
-                "(see Issue #34 for the real integration)."
-            ),
-        )
-    return x_dev_user_id
+def get_current_user_id(user: dict = Depends(get_current_user)) -> str:
+    """Resolve the authenticated caller's user id from a verified Firebase token."""
+    return user["uid"]
