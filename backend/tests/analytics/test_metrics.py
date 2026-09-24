@@ -458,6 +458,75 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(recoveries, [])
         self.assertIsNone(calculate_recovery_metrics(recoveries)["recovery_rate"])
 
+    def test_recovery_start_and_competing_start_use_the_same_delivery_clock(self) -> None:
+        """Issue #54 review (Sibtain).
+
+        _recovery_start_time (``start``) reads delivered_at, but the sort in
+        _eligible_interventions and competing_start in calculate_recoveries
+        used to read the intervention's offer timestamp instead -- two
+        different clocks deciding one recovery window. For a
+        learner-initiated intervention, acceptance (delivery) can happen long
+        after the offer, so the two could diverge enough to flip
+        recovery_rate based purely on when something was *offered*, with no
+        change in what the learner actually did.
+
+        One session, two interventions: a break_suggestion offered at t=0 but
+        not accepted (delivered) until t=300, with sustained focus starting
+        at t=310; a simplify_content offered at t=130 and delivered at t=133,
+        with no observed recovery. Delivered_at values are held fixed; only
+        the break_suggestion's offer time changes, between the two calls.
+        The result must be identical either way.
+        """
+        engagement_events = [
+            engagement(310, "focused", event_number=1),
+            engagement(315, "focused", event_number=2),
+        ]
+
+        def scenario(break_offer_offset: int):
+            interventions = [
+                intervention(
+                    break_offer_offset,
+                    intervention_number=1,
+                    intervention_type="break_suggestion",
+                    delivery_status="accepted",
+                    delivered=True,
+                    delivered_offset=300,
+                ),
+                intervention(
+                    130,
+                    intervention_number=2,
+                    intervention_type="simplify_content",
+                    delivery_status="displayed",
+                    delivered=True,
+                    delivered_offset=133,
+                ),
+            ]
+            recoveries = calculate_recoveries(
+                interventions, engagement_events, timestamp(400)
+            )
+            metrics = calculate_recovery_metrics(recoveries)
+            by_id = {item["intervention_id"]: item for item in recoveries}
+            return (
+                len(recoveries),
+                by_id["intervention-1"]["recovered"],
+                by_id["intervention-1"]["recovery_duration_seconds"],
+                by_id["intervention-2"]["recovered"],
+                metrics["recovery_rate"],
+            )
+
+        offered_at_zero = scenario(0)
+        offered_at_140 = scenario(140)
+
+        self.assertEqual(offered_at_zero, offered_at_140)
+        eligible_count, break_recovered, break_duration, simplify_recovered, rate = (
+            offered_at_zero
+        )
+        self.assertEqual(eligible_count, 2)
+        self.assertTrue(break_recovered)
+        self.assertEqual(break_duration, 10.0)
+        self.assertFalse(simplify_recovered)
+        self.assertEqual(rate, 0.5)
+
     def test_recovery_window_boundary_is_inclusive_but_later_evidence_is_not(self) -> None:
         config = MetricConfig(recovery_window_seconds=20)
         intervention_event = intervention(0, intervention_number=1)

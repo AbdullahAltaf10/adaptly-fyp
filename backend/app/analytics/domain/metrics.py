@@ -467,7 +467,10 @@ def _eligible_interventions(
     ]
     return sorted(
         eligible,
-        key=lambda item: (_parse_datetime(item["timestamp"]), item.get("intervention_id", "")),
+        key=lambda item: (
+            _recovery_start_time(item, config),
+            item.get("intervention_id", ""),
+        ),
     )
 
 
@@ -566,7 +569,7 @@ def calculate_recoveries(
         if start > end:
             continue
         competing_start = (
-            _parse_datetime(eligible[index + 1]["timestamp"])
+            _recovery_start_time(eligible[index + 1], config)
             if index + 1 < len(eligible)
             else None
         )
