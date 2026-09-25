@@ -20,6 +20,7 @@ everything for one module sits in one folder:
     app/content/routes.py      -> /content/*      (Module 2)
     app/engagement/routes.py   -> /engagement/*   (Module 3)
     app/intervention/routes.py -> /intervention/* (Module 4)
+    app/ai_assistant/api.py    -> /assistant/*    (Module 5)
 
 The reason is practical: with routes split out into a shared `api/` folder,
 changing one module means editing two places, and two people working on
@@ -29,6 +30,7 @@ module also means "show me Module 3" is one folder rather than four.
 
 from fastapi import APIRouter
 
+from app.ai_assistant.api import router as assistant_router
 from app.content.routes import router as content_router
 from app.engagement.routes import router as engagement_router
 from app.intervention.routes import router as intervention_router
@@ -47,3 +49,6 @@ api_router.include_router(engagement_router)
 
 # Module 4 - Adaptive Intervention
 api_router.include_router(intervention_router)
+
+# Module 5 - AI Study Assistant
+api_router.include_router(assistant_router)
