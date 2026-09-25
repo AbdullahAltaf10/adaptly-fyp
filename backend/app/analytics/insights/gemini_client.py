@@ -24,6 +24,10 @@ class GeminiUnavailableError(Exception):
     than several SDK-specific exceptions."""
 
 
+DEFAULT_MODEL = "gemini-3.6-flash"
+DEFAULT_TIMEOUT_SECONDS = 20.0
+
+
 @dataclass(frozen=True)
 class GeminiConfig:
     api_key: str | None
@@ -38,12 +42,28 @@ def load_gemini_config() -> GeminiConfig:
     development without a key) — it is reported back as part of the config
     rather than raised here, so the caller can route straight to the
     deterministic fallback.
+
+    ``GEMINI_MODEL``/``GEMINI_TIMEOUT_SECONDS`` are guarded the same way
+    Module 4's ``provider.py`` guards the variables it shares with this one:
+    ``os.getenv(..., default)`` only falls back when a variable is *absent*,
+    not when it's present-but-empty (e.g. a blank line in ``.env``, which is
+    exactly the pattern ``.env.example`` documents for every optional key
+    here). Left unguarded, a blank ``GEMINI_MODEL=`` line would silently ask
+    Gemini for model ``""``, and a blank ``GEMINI_TIMEOUT_SECONDS=`` would
+    raise inside ``float()`` and route every report to the fallback with no
+    clearer evidence than an ``error_code`` buried in the stored document.
     """
+
+    model_name = os.getenv("GEMINI_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    try:
+        timeout_seconds = float(os.getenv("GEMINI_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)))
+    except ValueError:
+        timeout_seconds = DEFAULT_TIMEOUT_SECONDS
 
     return GeminiConfig(
         api_key=os.environ.get("GEMINI_API_KEY") or None,
-        model_name=os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
-        timeout_seconds=float(os.environ.get("GEMINI_TIMEOUT_SECONDS", "20")),
+        model_name=model_name,
+        timeout_seconds=timeout_seconds,
     )
 
 

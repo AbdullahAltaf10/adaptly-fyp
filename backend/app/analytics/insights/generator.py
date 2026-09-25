@@ -58,12 +58,12 @@ def generate_insight_report(
         "last_attempted_at": now_str,
     }
 
+    config = load_gemini_config()
     error_code: str | None = None
     try:
         prompt = build_prompt(summary)
         raw_text = call_gemini(prompt)
         report_text = validate_report_text(raw_text)
-        config = load_gemini_config()
         return {
             **base,
             "status": "generated",

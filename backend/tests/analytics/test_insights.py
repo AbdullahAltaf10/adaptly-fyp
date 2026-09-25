@@ -467,7 +467,7 @@ class GeminiClientConfigTests(unittest.TestCase):
         config = load_gemini_config()
 
         self.assertIsNone(config.api_key)
-        self.assertEqual(config.model_name, "gemini-2.0-flash")
+        self.assertEqual(config.model_name, "gemini-3.6-flash")
         self.assertEqual(config.timeout_seconds, 20.0)
 
     def test_blank_api_key_is_treated_as_unset(self) -> None:
