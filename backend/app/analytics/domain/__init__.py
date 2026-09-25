@@ -1,5 +1,10 @@
 """Pure Module 8 analytics calculations."""
 
+from .learning_profile import (
+    DEFAULT_LEARNING_PROFILE_CONFIG,
+    LearningProfileConfig,
+    build_learning_profile,
+)
 from .metrics import (
     DEFAULT_CONFIG,
     METRIC_VERSION,
@@ -28,4 +33,7 @@ __all__ = [
     "classify_intervention_effectiveness",
     "find_longest_focused_period",
     "segment_engagement_timeline",
+    "DEFAULT_LEARNING_PROFILE_CONFIG",
+    "LearningProfileConfig",
+    "build_learning_profile",
 ]
