@@ -24,11 +24,32 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
   const [error, setError] = useState("");
   const [failedRequest, setFailedRequest] = useState(null);
   const [voiceResponsesEnabled, setVoiceResponsesEnabled] = useState(false);
+  // Tracks how the current `input` text arrived, so it can be reported as
+  // the request's input_mode (Issue #34). Reset to "typed" on every manual
+  // keystroke so selecting a suggestion or dictating, then editing by hand
+  // before sending, is correctly recorded as typed.
+  const [inputSource, setInputSource] = useState("typed");
   const nextMessageId = useRef(1);
   const endRef = useRef(null);
   const previousSessionId = useRef(studyContext.session_id);
   const speech = useSpeechSynthesis();
-  const recognition = useSpeechRecognition({ onFinalTranscript: setInput });
+
+  function handleManualInputChange(value) {
+    setInput(value);
+    setInputSource("typed");
+  }
+
+  function handleSuggestedQuestionSelect(value) {
+    setInput(value);
+    setInputSource("suggested_question");
+  }
+
+  function handleVoiceTranscript(value) {
+    setInput(value);
+    setInputSource("voice");
+  }
+
+  const recognition = useSpeechRecognition({ onFinalTranscript: handleVoiceTranscript });
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "end" });
@@ -55,9 +76,14 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
     appendUserMessage = true,
     historyOverride = null,
     requestContext = studyContext,
+    inputModeOverride = null,
   ) {
     const trimmedQuestion = question.trim();
     if (!trimmedQuestion || isLoading) return;
+
+    // Read before resetting below - a retry passes its own override instead,
+    // since by the time of a retry `inputSource` state has already reset.
+    const inputModeForSubmission = inputModeOverride || inputSource;
 
     const priorMessages = historyOverride || messages
       .filter((message) => message.role === "user" || message.role === "assistant")
@@ -68,6 +94,7 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
       setMessages((currentMessages) => [...currentMessages, userMessage]);
     }
     setInput("");
+    setInputSource("typed");
     setError("");
     setFailedRequest(null);
     setIsLoading(true);
@@ -77,6 +104,7 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
         ...requestContext,
         question: trimmedQuestion,
         previous_messages: priorMessages,
+        input_mode: inputModeForSubmission,
       });
       setMessages((currentMessages) => [
         ...currentMessages,
@@ -90,6 +118,7 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
         question: trimmedQuestion,
         previousMessages: priorMessages,
         requestContext,
+        inputMode: inputModeForSubmission,
       });
     } finally {
       setIsLoading(false);
@@ -103,6 +132,7 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
         false,
         failedRequest.previousMessages,
         failedRequest.requestContext,
+        failedRequest.inputMode,
       );
     }
   }
@@ -136,7 +166,11 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
           onStop={speech.stop}
         />
       </div>
-      <SuggestedQuestions questions={suggestedQuestions} onSelect={setInput} disabled={isLoading} />
+      <SuggestedQuestions
+        questions={suggestedQuestions}
+        onSelect={handleSuggestedQuestionSelect}
+        disabled={isLoading}
+      />
       {error && (
         <div className="assistant-error" role="alert">
           <span>{error}</span>
@@ -147,7 +181,7 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
       )}
       <QuestionInput
         value={input}
-        onChange={setInput}
+        onChange={handleManualInputChange}
         onSubmit={() => submitQuestion(input)}
         disabled={isLoading}
         voiceControl={(

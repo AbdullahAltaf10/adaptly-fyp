@@ -2,6 +2,13 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// See AssistantPanel.test.jsx for why: assistantApi.js now goes through the
+// shared axios client, which initializes Firebase auth on import. Every test
+// here injects its own apiClient prop, so mock the module out before import.
+vi.mock("../../api/client", () => ({
+  default: { post: vi.fn() },
+}));
+
 import { AssistantPanel } from "./AssistantPanel";
 
 let recognitionInstances = [];
@@ -66,6 +73,25 @@ describe("AssistantPanel voice interaction", () => {
     await screen.findByText("A spoken-path answer.");
     expect(apiClient.mock.calls[0][0].question).toBe("Explain gradient descent simply");
     expect(apiClient.mock.calls[0][0].previous_messages).toEqual([]);
+  });
+
+  it("sends input_mode 'voice' for a finalized speech transcript", async () => {
+    installSpeechRecognition();
+    const user = userEvent.setup();
+    const apiClient = vi.fn().mockResolvedValue({ answer: "A spoken-path answer." });
+    render(<AssistantPanel apiClient={apiClient} />);
+
+    await user.click(screen.getByRole("button", { name: "Speak your question" }));
+    act(() => {
+      recognitionInstances[0].onresult({
+        resultIndex: 0,
+        results: [{ 0: { transcript: "Explain gradient descent simply" }, isFinal: true }],
+      });
+    });
+
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText("A spoken-path answer.");
+    expect(apiClient.mock.calls[0][0].input_mode).toBe("voice");
   });
 
   it("keeps typed chat usable after a recognition error", async () => {

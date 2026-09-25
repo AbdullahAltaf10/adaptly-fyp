@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../../api/client", () => ({
+  default: { post: vi.fn() },
+}));
+
+import api from "../../api/client";
 import { sendAssistantMessage } from "./assistantApi";
 
 const payload = {
@@ -12,6 +17,7 @@ const payload = {
     section_title: "Gradient Descent",
   },
   previous_messages: [],
+  input_mode: "typed",
 };
 
 const validResponse = {
@@ -26,30 +32,48 @@ const validResponse = {
 };
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 describe("sendAssistantMessage", () => {
-  it("uses the single assistant endpoint with the provided integration context", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => validResponse });
-    vi.stubGlobal("fetch", fetchMock);
+  it("posts through the shared api client (which attaches auth) with input_mode included", async () => {
+    api.post.mockResolvedValue({ data: validResponse });
 
     await expect(sendAssistantMessage(payload)).resolves.toEqual(validResponse);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8000/assistant/messages",
-      expect.objectContaining({
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }),
+    expect(api.post).toHaveBeenCalledWith(
+      "/assistant/messages",
+      payload,
+      { signal: undefined },
+    );
+    expect(api.post.mock.calls[0][1].input_mode).toBe("typed");
+  });
+
+  it("forwards an abort signal through to the shared client", async () => {
+    api.post.mockResolvedValue({ data: validResponse });
+    const controller = new AbortController();
+
+    await sendAssistantMessage(payload, { signal: controller.signal });
+
+    expect(api.post).toHaveBeenCalledWith(
+      "/assistant/messages",
+      payload,
+      { signal: controller.signal },
     );
   });
 
   it("safely rejects network and malformed-response failures", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("connection refused")));
+    api.post.mockRejectedValue(new Error("Network Error"));
     await expect(sendAssistantMessage(payload)).rejects.toThrow("Unable to reach the assistant service.");
 
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ answer: "Only text" }) }));
+    api.post.mockResolvedValue({ data: { answer: "Only text" } });
     await expect(sendAssistantMessage(payload)).rejects.toThrow("Assistant service returned an invalid response.");
+  });
+
+  it("distinguishes a backend error status from an unreachable backend", async () => {
+    const httpError = new Error("Request failed with status code 502");
+    httpError.response = { status: 502 };
+    api.post.mockRejectedValue(httpError);
+
+    await expect(sendAssistantMessage(payload)).rejects.toThrow("Assistant service returned an error.");
   });
 });

@@ -2,6 +2,16 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+// AssistantPanel imports assistantApi.js as its default apiClient, which now
+// goes through the shared axios client (and, transitively, Firebase auth
+// init). Every test here injects its own apiClient prop and never touches
+// the real implementation, so mock the module before import rather than
+// let Firebase initialize with no test config - the same pattern
+// useIntervention.test.jsx already uses for the same reason.
+vi.mock("../../api/client", () => ({
+  default: { post: vi.fn() },
+}));
+
 import { AssistantPanel } from "./AssistantPanel";
 
 
@@ -91,5 +101,42 @@ describe("AssistantPanel", () => {
     expect(apiClient).toHaveBeenCalledTimes(2);
     expect(apiClient.mock.calls[1][0].previous_messages).toEqual([]);
     expect(screen.getAllByText("Please explain this.")).toHaveLength(1);
+  });
+
+  it("sends input_mode 'typed' for a manually typed question", async () => {
+    const user = userEvent.setup();
+    const apiClient = vi.fn().mockResolvedValue({ answer: "An answer." });
+    render(<AssistantPanel apiClient={apiClient} />);
+
+    await user.type(screen.getByLabelText("Ask Adaptly a question"), "What is gradient descent?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(apiClient).toHaveBeenCalled());
+    expect(apiClient.mock.calls[0][0].input_mode).toBe("typed");
+  });
+
+  it("sends input_mode 'suggested_question' when a suggestion is selected and sent", async () => {
+    const user = userEvent.setup();
+    const apiClient = vi.fn().mockResolvedValue({ answer: "An answer." });
+    render(<AssistantPanel apiClient={apiClient} />);
+
+    await user.click(screen.getByRole("button", { name: "Can you give me an example?" }));
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(apiClient).toHaveBeenCalled());
+    expect(apiClient.mock.calls[0][0].input_mode).toBe("suggested_question");
+  });
+
+  it("reverts to input_mode 'typed' if a selected suggestion is edited before sending", async () => {
+    const user = userEvent.setup();
+    const apiClient = vi.fn().mockResolvedValue({ answer: "An answer." });
+    render(<AssistantPanel apiClient={apiClient} />);
+
+    await user.click(screen.getByRole("button", { name: "Can you give me an example?" }));
+    await user.type(screen.getByLabelText("Ask Adaptly a question"), "?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(apiClient).toHaveBeenCalled());
+    expect(apiClient.mock.calls[0][0].input_mode).toBe("typed");
   });
 });
