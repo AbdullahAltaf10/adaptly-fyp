@@ -198,7 +198,7 @@ move, so re-verify with `git status` / `gh issue list` before trusting it blindl
 | **31** | Add Module 8 engagement timeline and intervention log | Not started | #26, #29, #30 |
 | **32** | Implement Module 8 Gemini insight report and fallback | Not started | #25, #28 |
 | **33** | Build Module 8 multi-session learning profile | Not started | #25, #28, #29 |
-| **34** | Integrate Module 8 with Modules 3, 4, and 5 | Not started — final hardening/integration issue | #25–#33, working Module 3/4/5 event producers |
+| **34** | Integrate Module 8 with Modules 3, 4, and 5 | **In progress.** Module 3: engagement events now written to Module 8's `EngagementEventRepository` via `app/engagement/analytics_sink.py`. Module 4: `intervention/store.py` now delegates to `InterventionEventRepository` internally instead of duplicating its allowlist (facade refactor — see "Known follow-ups" in §6.9). Module 5: wiring not yet started (was blocked on #65; now unblocked). | #25–#33 (all merged except #32, in review as PR #62) |
 
 **Dependency shape:**
 ```
@@ -388,8 +388,18 @@ For each issue:
 - [ ] Dashboard shell + timeline/intervention log UI (#30, #31)
 - [ ] Gemini insight report + deterministic fallback (#32)
 - [ ] Multi-session learning profile with evidence thresholds (#33)
-- [ ] Real integration with Modules 3/4/5, mock removal, end-to-end flow (#34)
+- [~] Real integration with Modules 3/4/5 (#34): Module 3 wired, Module 4 refactored to a
+      facade, Module 5 not yet started
 - [ ] Module 10/11 downstream readiness confirmed
+
+**Known follow-ups from #34 (documented intentionally, not done now):**
+- `intervention/store.py` is a facade over `InterventionEventRepository`, not a full removal.
+  The fully "correct" end state — deleting store.py and having `service.py`/`routes.py` call
+  the repository directly — touches 6 call sites across Module 4's own files and was
+  deliberately deferred to limit risk this close to the team's FYP defense. See store.py's
+  own docstring for the exact scope of that follow-up.
+- Module 5's assistant-usage events are not yet wired into Module 8's
+  `AssistantEventRepository`. This is the remaining piece of #34 - not started yet.
 
 ---
 
