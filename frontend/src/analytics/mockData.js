@@ -13,6 +13,22 @@
  *
  * This file is the ONLY thing that needs to change when the real API
  * replaces mock data — see `useSessionAnalytics.js`.
+ *
+ * `interventions` (added for Issue #31, the engagement timeline and
+ * intervention log) is a KNOWN BACKEND GAP, not an established contract
+ * field: Issue #29's `GET /api/sessions/{id}/analytics` endpoint (see
+ * docs/api/module-8-analytics-api.md) returns only the aggregate
+ * `intervention_metrics`, never a per-event list — there is currently no
+ * endpoint that serves individual intervention events for a session. Each
+ * entry below is shaped as the analytics-safe subset of
+ * shared/contracts/intervention-event.schema.json (dropping
+ * `schema_version`/`session_id`/`user_id`/`content_id`/`policy_version`/
+ * `model_version`, which the dashboard doesn't need to display) so that a
+ * real endpoint returning that shape can be wired in later without
+ * reshaping `InterventionLog.jsx`. Until Issue #29 (or a follow-up) adds
+ * that endpoint, treat `interventions` here as a forward-looking mock only
+ * — every other field in this file mirrors an endpoint that actually
+ * exists today.
  */
 
 const SCHEMA_VERSION = "1.0";
@@ -60,6 +76,35 @@ function zeroInterventionMetrics() {
     unknown_outcome_count: 0,
     effectiveness_rate: null,
     by_type: [],
+  };
+}
+
+/** See the file-level comment above: `interventions` is a forward-looking mock. */
+function interventionEvent({
+  id,
+  offset,
+  type,
+  reasonCode,
+  reason,
+  triggeringState,
+  deliveryStatus,
+  outcome,
+  recoverySeconds = null,
+  helped = null,
+}) {
+  return {
+    intervention_id: id,
+    timestamp: isoAt(offset),
+    intervention_type: type,
+    reason_code: reasonCode,
+    reason,
+    triggering_engagement_state: triggeringState,
+    delivery_status: deliveryStatus,
+    outcome,
+    recovery_timestamp:
+      recoverySeconds === null ? null : isoAt(offset + recoverySeconds),
+    recovery_duration_seconds: recoverySeconds,
+    helped,
   };
 }
 
@@ -162,6 +207,20 @@ const NORMAL_COMPLETED_SESSION = {
       flags: [],
     },
   },
+  interventions: [
+    interventionEvent({
+      id: "intervention-normal-1",
+      offset: 900,
+      type: "break_suggestion",
+      reasonCode: "drifting",
+      reason: "Attention had been drifting for a little while.",
+      triggeringState: "drifting",
+      deliveryStatus: "completed",
+      outcome: "recovered",
+      recoverySeconds: 60,
+      helped: true,
+    }),
+  ],
   insightReport: {
     status: "generated",
     report_text:
@@ -217,6 +276,7 @@ const NO_INTERVENTIONS = {
       flags: [],
     },
   },
+  interventions: [],
   insightReport: {
     status: "generated",
     report_text:
@@ -272,6 +332,7 @@ const SPARSE_ANALYTICS_DATA = {
       flags: ["sparse_engagement", "excessive_unknown_gaps"],
     },
   },
+  interventions: [],
   insightReport: {
     status: "fallback_generated",
     report_text:
@@ -327,6 +388,7 @@ const NO_WEBCAM_DATA = {
       flags: ["no_webcam_data", "sparse_engagement"],
     },
   },
+  interventions: [],
   insightReport: {
     status: "fallback_generated",
     report_text:
@@ -422,6 +484,32 @@ const INSIGHT_REPORT_UNAVAILABLE = {
       flags: [],
     },
   },
+  interventions: [
+    interventionEvent({
+      id: "intervention-insight-unavailable-1",
+      offset: 1250,
+      type: "simplify_content",
+      reasonCode: "reading_difficulty",
+      reason: "The material seemed to be slowing things down.",
+      triggeringState: "drifting",
+      deliveryStatus: "completed",
+      outcome: "recovered",
+      recoverySeconds: 45,
+      helped: true,
+    }),
+    interventionEvent({
+      id: "intervention-insight-unavailable-2",
+      offset: 1420,
+      type: "assistant_help_prompt",
+      reasonCode: "other",
+      reason: "Offered a chance to ask the assistant a question.",
+      triggeringState: "unknown",
+      deliveryStatus: "displayed",
+      outcome: "unknown",
+      recoverySeconds: null,
+      helped: null,
+    }),
+  ],
   insightReport: {
     status: "failed",
     report_text: null,
@@ -503,6 +591,20 @@ const COMPLETE_ANALYTICS = {
       flags: [],
     },
   },
+  interventions: [
+    interventionEvent({
+      id: "intervention-complete-1",
+      offset: 1600,
+      type: "bullet_summary",
+      reasonCode: "struggling",
+      reason: "Offered a quick summary of the section just covered.",
+      triggeringState: "struggling",
+      deliveryStatus: "completed",
+      outcome: "recovered",
+      recoverySeconds: 30,
+      helped: true,
+    }),
+  ],
   insightReport: {
     status: "generated",
     report_text:

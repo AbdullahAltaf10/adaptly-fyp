@@ -1,11 +1,16 @@
 /**
- * Post-session analytics dashboard shell (Issue #30).
+ * Post-session analytics dashboard shell (Issue #30), plus the fuller
+ * engagement timeline and intervention log (Issue #31).
  *
  * Everything below the active-session guard renders from mock data today
  * (`src/analytics/mockData.js`, via `useSessionAnalytics`). Swapping in the
  * real `GET /api/sessions/{session_id}/analytics` endpoint (Issue #29) later
  * only requires changing `useSessionAnalytics`'s default fetcher — nothing
- * in this file or the components it renders needs to change.
+ * in this file or the components it renders needs to change, EXCEPT
+ * `InterventionLog`: see the `interventions` note in `mockData.js` — that
+ * per-event list isn't served by any real endpoint yet, so `data.interventions`
+ * will be `undefined` once mock data is removed, and `InterventionLog`
+ * already renders its empty state gracefully in that case.
  *
  * This dashboard is intentionally not wired into `App.jsx`'s routing. As its
  * own comment says, that file is a thin placeholder Module 1's real frontend
@@ -14,9 +19,16 @@
 
 import ActiveSessionNotice from "../analytics/ActiveSessionNotice";
 import EngagementSection from "../analytics/EngagementSection";
+import EngagementTimeline from "../analytics/EngagementTimeline";
 import ErrorState from "../analytics/ErrorState";
-import { formatCount, formatDurationSeconds, formatFraction } from "../analytics/format";
+import {
+  computeSessionStartIso,
+  formatCount,
+  formatDurationSeconds,
+  formatFraction,
+} from "../analytics/format";
 import InsightReport from "../analytics/InsightReport";
+import InterventionLog from "../analytics/InterventionLog";
 import InterventionSection from "../analytics/InterventionSection";
 import LoadingState from "../analytics/LoadingState";
 import SessionOverview from "../analytics/SessionOverview";
@@ -91,7 +103,17 @@ export default function AnalyticsDashboard({ session, fetchAnalytics, onRetryIns
           </section>
 
           <EngagementSection distribution={data.summary.engagement_distribution} />
+          <EngagementTimeline
+            segments={data.summary.timeline_segments}
+            interventions={data.interventions}
+            totalDurationSeconds={data.summary.duration_seconds}
+            sessionStartIso={computeSessionStartIso(data.summary)}
+          />
           <InterventionSection interventionMetrics={data.summary.intervention_metrics} />
+          <InterventionLog
+            interventions={data.interventions}
+            sessionStartIso={computeSessionStartIso(data.summary)}
+          />
           <InsightReport insightReport={data.insightReport} onRetry={onRetryInsightReport} />
         </>
       )}
