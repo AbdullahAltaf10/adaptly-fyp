@@ -439,6 +439,34 @@ For each issue:
 - When reviewing Hassan's integration work: `gh issue list --assignee <his-username>` (confirm
   actual username first), cross-check his code against `shared/contracts/` and this architecture.
 
+### 7.1 Scope Discipline — Staying Aligned Across Modules (repo-wide, not just Module 8)
+
+This came out of PR #43 (Module 5): a branch built weeks earlier, against an older `develop`,
+collided badly with everything that had merged since — a router file that would have silently
+deleted other modules' endpoints, a duplicate frontend scaffold, conflicting CORS config, two
+disagreeing dependency manifests. None of it was carelessness; it was the natural result of a
+branch drifting out of sync with the rest of the repo while it sat waiting for review. To avoid
+repeating this:
+
+1. **Before starting an issue**, re-read this file's section for that module *and* the live issue
+   on GitHub — not memory of either. If the branch will live more than a couple of days before
+   review, plan to rebase onto `develop` right before opening the PR, not just at branch creation.
+2. **Build only what the issue asks for.** Don't re-scaffold something another module already
+   owns (frontend app shell, router registration, CORS, dependency manifests) — touch those
+   additively (one line, one entry), never by replacing the file wholesale.
+3. **Shared files are additive-only by convention**: `backend/app/api/router.py`,
+   `backend/app/main.py`'s middleware, `backend/requirements.txt`, `.gitignore`. A PR that
+   rewrites one of these instead of adding a line to it should be treated as a design smell worth
+   a second look before requesting review.
+4. **One dependency manifest** (`backend/requirements.txt`). Don't introduce a second one
+   (e.g. `pyproject.toml`) for a single module's needs.
+5. **Keep this file current as part of the PR that changes shared plumbing** — not as separate
+   cleanup afterward. If your PR changes router registration, CORS, the dependency manifest, or a
+   module's ownership/status, update the relevant section here in the same PR.
+6. **Self-review against this section before requesting teammate review** — catching a
+   router.py rewrite or a duplicate scaffold yourself costs a few minutes; catching it after two
+   people have reviewed costs a full re-review cycle.
+
 ---
 
 ## 8. Constraints to Respect Project-Wide
