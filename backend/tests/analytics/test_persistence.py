@@ -12,8 +12,8 @@ import unittest
 
 import mongomock
 
-from backend.app.analytics.domain.metrics import build_session_summary
-from backend.app.analytics.persistence import (
+from app.analytics.domain.metrics import build_session_summary
+from app.analytics.persistence import (
     AssistantEventRepository,
     ChunkProgressRepository,
     EngagementEventRepository,
