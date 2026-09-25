@@ -24,6 +24,7 @@ from app.engagement import (
     session as session_state,
     smoothing,
 )
+from app.engagement.analytics_sink import record_engagement_event
 from app.engagement.calibration import apply_calibration, compute_offset, compute_user_baseline
 from app.intervention import service as intervention
 from ml.inference import head_pose
@@ -265,6 +266,8 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
             deep_thinking_detected=dt_result["deep_thinking"],
             gaze_regression_detected=False,   # never measured; see rereading.py
         )
+
+        record_engagement_event(event)
 
         # Module 4. Wrapped because engagement detection works today and this
         # is new: a fault in the intervention path must not take the analyze
