@@ -25,6 +25,7 @@ from app.engagement import (
     smoothing,
 )
 from app.engagement.calibration import apply_calibration, compute_offset, compute_user_baseline
+from app.intervention import service as intervention
 from ml.inference import head_pose
 from ml.inference.features import InvalidLandmarksError, extract_features
 from ml.inference.model import predict
@@ -48,6 +49,16 @@ class AnalyzeRequest(BaseModel):
     session_id: Optional[str] = None
     content_id: Optional[str] = None
     chunk_id: Optional[str] = None
+
+    # How long the learner has been on this chunk. Module 4 uses it to decide
+    # how intrusive a response is justified - rewriting a paragraph somebody
+    # glanced at for three seconds is not support, it is interference.
+    #
+    # The browser measures it because the server cannot: scrolling produces no
+    # request. Until the content viewer exists (issue #12) nothing sends it, it
+    # stays 0, and the dwell-gated responses simply never fire. That is the
+    # right failure - no dwell evidence, no dwell-based intervention.
+    dwell_seconds: Optional[float] = 0.0
 
 
 class SessionRequest(BaseModel):
@@ -91,6 +102,11 @@ def start_session(payload: SessionRequest, user=Depends(get_current_user)):
 @router.post("/session/end")
 def end_session(payload: SessionRequest, user=Depends(get_current_user)):
     """Finish a session and release its rule state immediately."""
+    # Module 4's cooldown is per-session and in memory, like the rules above,
+    # and a new session must not inherit the previous one's quiet period. Kept
+    # here rather than inside session.py so the engagement rules stay a closed
+    # set that knows nothing about interventions.
+    intervention.on_session_end(user["uid"], payload.session_id)
     return session_state.end(user["uid"], payload.session_id)
 
 
@@ -169,6 +185,10 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
                 "event": None,
                 "state": prediction["state"],
                 "confidence": prediction["confidence"],
+                # Same shape as the full response so a client never has to
+                # check whether the key is there. Interventions need a session
+                # anyway - there is nowhere to keep a cooldown without one.
+                "intervention": None,
                 "diagnostics": {"note": "session_id is required for smoothing and rules"},
             }
 
@@ -246,10 +266,41 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
             gaze_regression_detected=False,   # never measured; see rereading.py
         )
 
+        # Module 4. Wrapped because engagement detection works today and this
+        # is new: a fault in the intervention path must not take the analyze
+        # endpoint down with it. The reason is reported rather than swallowed.
+        try:
+            decision = intervention.evaluate(
+                uid,
+                session_id,
+                state=state,
+                source=source,
+                confidence=prediction["confidence"],
+                # The two signals the tiers were measured on, kept separate -
+                # see ml/evaluation/trigger_fusion.py. Deliberately the raw
+                # per-window class rather than the smoothed state: smoothing
+                # needs three consecutive agreeing windows before it displays
+                # struggling, which a learner whose recall is 0.28 almost never
+                # produces. Smoothing exists for display stability; the
+                # intervention's stability comes from its cooldown instead.
+                raw_struggling=prediction["state"] == "struggling",
+                brow_struggling=bool(furrow_result["furrowed"]),
+                content_id=payload.content_id,
+                chunk_id=payload.chunk_id,
+                dwell_seconds=payload.dwell_seconds,
+                engagement_event_id=event["event_id"],
+            )
+        except Exception as error:
+            decision = {"intervention": None, "note": f"intervention path failed: {error}"}
+
         return {
             "event": event,
             "state": state,
             "confidence": prediction["confidence"],
+            # None most of the time. When present the client renders it and
+            # then reports delivery to /intervention/{id}/status - an
+            # intervention left at `offered` is measured by nothing.
+            "intervention": decision["intervention"],
             # Development instruments only. Not part of the contract, and not
             # shown to a learner in the finished product - scope section 6.8
             # requires no scores or indicators during an active session.
@@ -261,6 +312,7 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
                 "deep_thinking": dt_result,
                 "recovery": recovery_result,
                 "rereading": rereading.detect_rereading([]),
+                "intervention": decision["note"],
             },
         }
 

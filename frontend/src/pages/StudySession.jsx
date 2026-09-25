@@ -15,6 +15,9 @@ import { useState } from "react";
 
 import { useEngagementCapture } from "../engagement/useEngagementCapture";
 import { useFacePresence } from "../engagement/useFacePresence";
+import InterventionHost from "../intervention/InterventionHost";
+import { useDwell } from "../intervention/useDwell";
+import { useIntervention } from "../intervention/useIntervention";
 
 /** How a reported state is labelled and coloured. */
 const STATE_DISPLAY = {
@@ -32,11 +35,29 @@ function describeState(state) {
 export default function StudySession({ contentId, chunkId, highContrast = false }) {
   const [started, setStarted] = useState(false);
 
-  const capture = useEngagementCapture({ active: started, contentId, chunkId });
+  // Nothing registers a chunk until a content viewer exists (issue #12), so
+  // `seconds()` returns 0 and the dwell-gated interventions stay out of reach.
+  // The viewer will call `dwell.register(chunkId, element)` as it renders,
+  // and they start firing with no change here.
+  const dwell = useDwell({ enabled: started });
+
+  const capture = useEngagementCapture({
+    active: started,
+    contentId,
+    chunkId,
+    getDwellSeconds: dwell.seconds,
+  });
   const presence = useFacePresence({
     faceDetected: capture.faceDetected,
     enabled: started && capture.ready,
     calibrated: capture.calibrated,
+  });
+
+  // Module 4. `prediction.intervention` is null on almost every window - the
+  // cooldown alone keeps it empty for two minutes after anything fires.
+  const intervention = useIntervention({
+    intervention: capture.prediction?.intervention ?? null,
+    sessionId: capture.sessionId,
   });
 
   const { prediction } = capture;
@@ -353,6 +374,21 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
           </div>
         )}
 
+        {/* Module 4's support, inline and quiet. Scope 6.4 asks for this
+            "without any sound, flash, or alert", so it sits in the normal
+            flow of the page rather than over it. */}
+        <div style={{ width: "100%", maxWidth: "620px" }}>
+          <InterventionHost
+            intervention={intervention.current}
+            content={intervention.content}
+            loading={intervention.loading}
+            accepted={intervention.accepted}
+            onAccept={intervention.accept}
+            onComplete={intervention.complete}
+            onDismiss={intervention.dismiss}
+          />
+        </div>
+
         {prediction && (
           <>
             <p style={{ fontSize: "1.1rem", margin: "0.5rem 0" }}>
@@ -387,8 +423,15 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
  * difference between measuring a threshold and guessing at it again.
  */
 function Diagnostics({ diagnostics, dropped }) {
-  const { smoothing, fatigue, furrow, deep_thinking: dt, recovery, rereading } =
-    diagnostics;
+  const {
+    smoothing,
+    fatigue,
+    furrow,
+    deep_thinking: dt,
+    recovery,
+    rereading,
+    intervention,
+  } = diagnostics;
 
   const mono = {
     fontFamily: "monospace",
@@ -473,6 +516,11 @@ function Diagnostics({ diagnostics, dropped }) {
         )}
 
         {rereading && <div>re-reading: {rereading.status} ({rereading.reason})</div>}
+
+        {/* "Why did nothing happen" is the question this path gets asked most,
+            and the backend answers it on every window rather than only in a
+            log. Development instrument, like everything else in this panel. */}
+        {intervention && <div>intervention: {intervention}</div>}
 
         {dropped > 0 && (
           <div>
