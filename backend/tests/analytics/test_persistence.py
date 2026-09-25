@@ -17,6 +17,7 @@ from backend.app.analytics.persistence import (
     AssistantEventRepository,
     ChunkProgressRepository,
     EngagementEventRepository,
+    InsightReportRepository,
     InterventionEventRepository,
     LearningProfileRepository,
     SessionAnalyticsRepository,
@@ -380,6 +381,57 @@ class LearningProfilePersistenceTests(unittest.TestCase):
         self.assertEqual(stored["sessions_analyzed"], 5)
 
 
+class InsightReportPersistenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.repo = InsightReportRepository(_database())
+        self.report = {
+            "schema_version": "1.0",
+            "report_id": "insight-session-1",
+            "session_id": "session-1",
+            "user_id": "user-1",
+            "status": "generated",
+            "report_text": "You stayed focused for most of this session.",
+            "generation_method": "gemini",
+            "model_name": "gemini-2.0-flash",
+            "model_version": None,
+            "generated_at": timestamp(1200),
+            "fallback_used": False,
+            "retry_count": 0,
+            "last_attempted_at": timestamp(1200),
+            "error_code": None,
+        }
+
+    def test_save_then_get_round_trips_report(self) -> None:
+        self.repo.save(self.report)
+
+        stored = self.repo.get("session-1")
+
+        self.assertEqual(stored["status"], "generated")
+        self.assertEqual(stored["report_text"], self.report["report_text"])
+
+    def test_retry_replaces_rather_than_duplicates(self) -> None:
+        self.repo.save(self.report)
+        retried = dict(self.report, status="fallback_generated", retry_count=1)
+        self.repo.save(retried)
+
+        stored = self.repo.get("session-1")
+
+        self.assertEqual(stored["retry_count"], 1)
+        self.assertEqual(stored["status"], "fallback_generated")
+
+    def test_missing_report_returns_none(self) -> None:
+        self.assertIsNone(self.repo.get("does-not-exist"))
+
+    def test_only_contract_fields_are_persisted(self) -> None:
+        polluted = dict(self.report, api_key="secret", raw_prompt="full prompt text")
+        self.repo.save(polluted)
+
+        stored = self.repo.get("session-1")
+
+        self.assertNotIn("api_key", stored)
+        self.assertNotIn("raw_prompt", stored)
+
+
 class IndexPresenceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.database = _database()
@@ -415,6 +467,10 @@ class IndexPresenceTests(unittest.TestCase):
     def test_learning_profile_indexes_exist(self) -> None:
         names = self.database[collections.LEARNING_PROFILES].index_information()
         self.assertIn("uniq_user_id", names)
+
+    def test_insight_report_indexes_exist(self) -> None:
+        names = self.database[collections.INSIGHT_REPORTS].index_information()
+        self.assertIn("uniq_session_id", names)
 
     def test_ensure_indexes_is_safe_to_call_twice(self) -> None:
         ensure_indexes(self.database)  # must not raise

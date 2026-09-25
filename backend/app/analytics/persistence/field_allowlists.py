@@ -134,6 +134,25 @@ CHUNK_PROGRESS_FIELDS = {
     "is_critical",
 }
 
+# Analytics-report contract fields (shared/contracts/analytics-report.schema.json).
+# One document per session_id (see insight_reports.py) — Issue #32.
+ANALYTICS_REPORT_FIELDS = {
+    "schema_version",
+    "report_id",
+    "session_id",
+    "user_id",
+    "status",
+    "report_text",
+    "generation_method",
+    "model_name",
+    "model_version",
+    "generated_at",
+    "fallback_used",
+    "retry_count",
+    "last_attempted_at",
+    "error_code",
+}
+
 LEARNING_PROFILE_FIELDS = {
     "schema_version",
     "metric_version",

@@ -17,6 +17,7 @@ from .events import (
     InterventionEventRepository,
 )
 from .indexes import ensure_indexes
+from .insight_reports import InsightReportRepository
 from .learning_profiles import LearningProfileRepository
 from .session_analytics import SessionAnalyticsRepository
 from .sessions import ChunkProgressRepository, SessionRepository
@@ -33,4 +34,5 @@ __all__ = [
     "ChunkProgressRepository",
     "SessionAnalyticsRepository",
     "LearningProfileRepository",
+    "InsightReportRepository",
 ]

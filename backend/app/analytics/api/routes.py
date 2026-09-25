@@ -1,4 +1,4 @@
-"""Module 8 analytics and session-history API endpoints (Issue #29).
+"""Module 8 analytics and session-history API endpoints (Issue #29, #32).
 
 Thin HTTP layer only: every endpoint resolves the caller through
 ``get_current_user_id`` (never a client-supplied ``user_id``), fetches data
@@ -6,8 +6,10 @@ through the Issue #27 repositories, and returns data already shaped by the
 Issue #26/#28 contracts. No metric calculation and no MongoDB query building
 happens in this file directly beyond simple ownership/state checks.
 
-Deliberately excluded: any Gemini/LLM import or call. Issue #32 owns real
-insight-report generation; the retry endpoint here is a documented stub.
+``POST .../insight-report/retry`` is the ONLY trigger for Gemini/fallback
+generation (Issue #32, ``backend/app/analytics/insights``) anywhere in
+Module 8 — ``GET .../analytics`` stays passive and only ever reads whatever
+has already been generated and persisted; it never calls Gemini itself.
 """
 
 from __future__ import annotations
@@ -18,11 +20,25 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from backend.app.analytics.api.deps import get_repositories
 from backend.app.analytics.domain.metrics import DEFAULT_CONFIG, METRIC_VERSION
+from backend.app.analytics.insights.gemini_client import call_gemini as _default_call_gemini
+from backend.app.analytics.insights.generator import GeminiCaller, generate_insight_report
 from backend.app.analytics.persistence.base import format_timestamp, utc_now
 from backend.app.analytics.service.finalization import AnalyticsRepositories
 from backend.app.api.deps import get_current_user_id
 
 router = APIRouter(tags=["module-8-analytics"])
+
+
+def get_gemini_caller() -> GeminiCaller:
+    """FastAPI dependency for the Gemini call function.
+
+    Overridden in tests (``app.dependency_overrides[get_gemini_caller] = ...``)
+    with a fake callable, the same pattern used for ``get_repositories`` and
+    ``get_current_user_id`` — no test ever performs a real network call to
+    Gemini.
+    """
+
+    return _default_call_gemini
 
 
 def _get_owned_session(
@@ -144,10 +160,11 @@ def get_session_analytics(
     session = _get_owned_session(repositories, session_id, user_id)
     summary_document = _require_completed_summary(repositories, session)
 
+    report = repositories.insight_reports.get(session_id)
     response = dict(summary_document["summary"])
     response["insight_report"] = {
         "status": summary_document["insight_report_status"],
-        "report_text": None,
+        "report_text": report["report_text"] if report else None,
     }
     return response
 
@@ -190,11 +207,18 @@ def retry_insight_report(
     session_id: str,
     user_id: str = Depends(get_current_user_id),
     repositories: AnalyticsRepositories = Depends(get_repositories),
+    call_gemini: GeminiCaller = Depends(get_gemini_caller),
 ) -> dict[str, Any]:
-    """Stub retry endpoint. Issue #32 owns real Gemini generation.
+    """Generate (first attempt) or retry (after "failed") the insight report.
 
-    Never recomputes or re-saves the session summary — this only reads the
-    existing insight-report status and reports it back honestly.
+    This is the ONLY place in Module 8 that ever calls Gemini or the
+    deterministic fallback. Never recomputes or re-saves the numeric session
+    summary — only the separate insight-report document and the summary's
+    ``insight_report_status`` envelope field are touched. A report that
+    already reached ``"generated"`` or ``"fallback_generated"`` is left
+    untouched and reported back as-is, matching the once-per-status-
+    transition contract (free-tier Gemini quota is not re-spent on a report
+    that already exists).
     """
 
     session = _get_owned_session(repositories, session_id, user_id)
@@ -202,17 +226,41 @@ def retry_insight_report(
     current_status = summary_document["insight_report_status"]
 
     if current_status in ("generated", "fallback_generated"):
-        message = "An insight report already exists for this session; nothing to retry."
-    else:
+        return {
+            "session_id": session_id,
+            "insight_report_status": current_status,
+            "retried": False,
+            "message": "An insight report already exists for this session; nothing to retry.",
+        }
+
+    existing_report = repositories.insight_reports.get(session_id)
+    retry_count = existing_report["retry_count"] + 1 if existing_report else 0
+
+    report = generate_insight_report(
+        summary_document["summary"],
+        session_id=session_id,
+        user_id=user_id,
+        call_gemini=call_gemini,
+        retry_count=retry_count,
+    )
+    repositories.insight_reports.save(report)
+    repositories.session_analytics.set_insight_report_status(
+        session_id, summary_document["summary"]["metric_version"], report["status"]
+    )
+
+    if report["status"] == "generated":
+        message = "A written summary was generated for this session."
+    elif report["status"] == "fallback_generated":
         message = (
-            "Insight report generation is not implemented yet (see Issue "
-            "#32). The numeric analytics summary is unaffected and was not "
-            "recomputed."
+            "Gemini was unavailable, so a summary was generated from your "
+            "session numbers instead."
         )
+    else:
+        message = "The written summary could not be generated. You can try again."
 
     return {
         "session_id": session_id,
-        "insight_report_status": current_status,
-        "retried": False,
+        "insight_report_status": report["status"],
+        "retried": True,
         "message": message,
     }

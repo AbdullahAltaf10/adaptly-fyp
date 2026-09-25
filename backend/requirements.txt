@@ -22,6 +22,12 @@ certifi>=2026.6.17                # REQUIRED for MongoDB Atlas TLS on Windows.
 # --- Authentication ---
 firebase-admin>=7.5.0
 
+# --- LLM (Module 8 insight reports) ---
+# Pinned >=2.0 to align with Module 4's PR #48 pin, avoiding a third
+# conflicting google-genai version constraint (Module 5's unmerged PR #43
+# pins <2.0 — do not match that pin; that branch's code is not depended on).
+google-genai>=2.0
+
 # --- Content processing ---
 pypdf>=6.14.2                     # standard PDF text extraction
 pymupdf>=1.28.0                   # column-aware research-paper extraction (imports as "fitz")
