@@ -35,6 +35,12 @@ level information.
 | 33 | Build Module 8 multi-session learning profile | ⬜ Not started | — |
 | 34 | Integrate Module 8 with Modules 3, 4, and 5 | ⬜ Not started | — |
 
+### Cross-cutting fixes (not tied to one milestone issue)
+
+| Issues | Title | Status | Detail doc |
+|---|---|---|---|
+| 45 & 46 | Contract fixes flagged by Sibtain while reading the metric engine for Module 4: reserve `sequence_id`/`step_index` for future escalation sequences, and fix a recovery-rate bug caused by reading a status that changes over time instead of a one-time delivery fact | ✅ Done | [issue-45-46-contract-fixes.md](issue-45-46-contract-fixes.md) |
+
 ## How the pieces fit together
 
 ```

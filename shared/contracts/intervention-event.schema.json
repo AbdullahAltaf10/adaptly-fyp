@@ -149,6 +149,26 @@
         "string",
         "null"
       ]
+    },
+    "delivered_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "sequence_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "step_index": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
     }
   }
 }
