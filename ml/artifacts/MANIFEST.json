@@ -33,6 +33,65 @@
     "focused_reference_means.json": {
       "sha256": "dcf4a44168ebb952fefe778dc4e925e92adc69414839615ff9902b803b71dc35",
       "size_bytes": 315
+    },
+    "best_model_9f_calibrated.keras": {
+      "sha256": "6d60c71902de5601d004908c0ca8ed04802967737570c6e95742361d691f17e6",
+      "size_bytes": 427447
+    },
+    "scaler_9f_calibrated.pkl": {
+      "sha256": "ea4156015491ce377c2f40bd3863f5f4f999a6e77a3e609014dd8389e3481869",
+      "size_bytes": 632
     }
+  },
+  "calibrated_variant": {
+    "description": "Trained on per-subject-centred features, matching what backend/app/engagement/calibration.py already produces at inference. Not yet the production model - see ml/evaluation/README.md.",
+    "model": "best_model_9f_calibrated.keras",
+    "scaler": "scaler_9f_calibrated.pkl",
+    "selected_seed": 2,
+    "validation_macro_recall": 0.4036,
+    "recommended_threshold": 0.34,
+    "trained_at": "2026-09-21T11:20:04.128218+00:00",
+    "training": {
+      "epochs": 50,
+      "batch_size": 32,
+      "learning_rate": 0.0005,
+      "oversample_targets": {
+        "drifting": 2500,
+        "struggling": 2500
+      },
+      "oversample_noise_std": 0.05,
+      "early_stopping": "val_macro_recall, patience 7, restore best"
+    },
+    "threshold_note": "Chosen on validation for THIS artifact, not taken from the multi-seed average. The averaged study suggested 0.40, but this selected model is more conservative than average (argmax flag rate 0.051 against ~0.100), so an averaged threshold does not transfer to it. 0.34 rather than the 0.32 the selection rule picked: 0.32 keeps the flag rate under 0.25 on validation but drifts to 0.271 on test, while 0.34 stays under it on both.",
+    "measured": {
+      "note": "Test split, per-subject-centred features. Never used for selection.",
+      "uncalibrated_shipped_argmax": {
+        "struggling_recall": 0.099,
+        "precision_lift": 0.8,
+        "subject_coverage": "6/19",
+        "macro_f1": 0.351,
+        "flag_rate": 0.123
+      },
+      "this_artifact_argmax": {
+        "struggling_recall": 0.094,
+        "precision_lift": 1.83,
+        "subject_coverage": "9/19",
+        "macro_f1": 0.406,
+        "flag_rate": 0.051
+      },
+      "this_artifact_at_recommended_threshold": {
+        "struggling_recall": 0.276,
+        "precision_lift": 1.29,
+        "subject_coverage": "15/19",
+        "macro_f1": 0.398,
+        "flag_rate": 0.214
+      }
+    },
+    "caveats": [
+      "Not the production model. ml/inference/model.py still loads the uncalibrated artifacts and still uses argmax.",
+      "Subject coverage 15/19 still leaves roughly one in five struggling learners never detected.",
+      "The flag rate roughly doubles, 0.123 to 0.214. Scope 6.4 asks for infrequent targeted support; whether one window in five qualifies is a product decision, not an ML one.",
+      "One train/test split. Leave-one-subject-out cross-validation would be a stronger basis for these figures."
+    ]
   }
 }

@@ -27,6 +27,7 @@ MANIFEST_FILE = "MANIFEST.json"
 
 # Index -> label. Lowercase to match shared/contracts/engagement-event.schema.json.
 STATE_LABELS = {0: "focused", 1: "drifting", 2: "struggling"}
+STRUGGLING_INDEX = 2
 
 WINDOW_SIZE = 10
 FEATURE_COUNT = 9
@@ -90,11 +91,37 @@ def load_model():
     return _model, _scaler
 
 
-def predict(feature_sequence) -> dict:
+def predict(feature_sequence, struggling_threshold: float = None) -> dict:
     """
     feature_sequence: 10 windows of 9 features, already calibration-corrected.
 
     Returns {"state": str, "confidence": float}.
+
+    `struggling_threshold` is opt-in and defaults to None, which keeps the
+    plain argmax this has always used - existing callers are unaffected.
+    Passing a value applies a one-sided override: report "struggling" whenever
+    its probability clears the threshold, even when another class is more
+    likely, and otherwise take the argmax of the remaining classes.
+
+    Why only Struggling gets a lowered bar
+    --------------------------------------
+    argmax is the right rule only when a false positive costs the same as a
+    false negative. Scope section 6.4 delivers interventions "without any
+    sound, flash, or alert", inline and dismissible, so a false alarm is cheap
+    while a missed struggling learner gets no help at all. The other two
+    classes carry no such asymmetry.
+
+    Measured on a per-subject-centred model (ml/evaluation/calibrated_threshold.py):
+    at 0.40, against argmax on the current model, Struggling recall rises from
+    0.142 to 0.197, the number of distinct learners reached doubles, and
+    precision moves from 0.80x the class base rate - worse than flagging at
+    random - to 1.23x.
+
+    Deliberately NOT applied by default. On the CURRENT uncalibrated model the
+    same change buys nothing (ml/evaluation/threshold_sweep.py): its Struggling
+    precision is already below the base rate, so a lower threshold only adds
+    noise. The gain depends on the calibrated artifacts, and switching to
+    those is a separate decision.
     """
     if len(feature_sequence) != WINDOW_SIZE:
         raise ValueError(f"expected {WINDOW_SIZE} frames, got {len(feature_sequence)}")
@@ -108,8 +135,24 @@ def predict(feature_sequence) -> dict:
     scaled = scaler.transform(array)
     probabilities = model.predict(scaled.reshape(1, WINDOW_SIZE, FEATURE_COUNT), verbose=0)[0]
 
-    predicted = int(np.argmax(probabilities))
+    if (struggling_threshold is not None
+            and probabilities[STRUGGLING_INDEX] >= struggling_threshold):
+        predicted = STRUGGLING_INDEX
+    else:
+        predicted = int(np.argmax(probabilities))
+
     return {
         "state": STATE_LABELS[predicted],
         "confidence": round(float(probabilities[predicted]), 4),
+        # Every class's probability, not only the winner's.
+        #
+        # A caller that reports a DIFFERENT state than this function returned -
+        # the smoothing layer holding a previous state through a transition,
+        # for instance - needs the probability of the state it actually
+        # reports. Without this it can only report the winner's confidence
+        # beside somebody else's label.
+        "probabilities": {
+            STATE_LABELS[index]: round(float(value), 4)
+            for index, value in enumerate(probabilities)
+        },
     }

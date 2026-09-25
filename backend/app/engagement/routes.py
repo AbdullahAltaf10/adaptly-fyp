@@ -193,21 +193,51 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
         effective_state = "deep_thinking" if dt_result["deep_thinking"] else smoothed["state"]
         recovery_result = recovery.update(uid, session_id, effective_state)
 
-        # Precedence, and which layer produced the reported state.
+        # Precedence, which layer produced the reported state, and - this part
+        # was wrong until now - a confidence that describes THAT state.
+        #
+        # The event always carried prediction["confidence"], the model's
+        # confidence in its own raw winning class. That is the right number in
+        # only some of the cases below:
+        #
+        #   fatigued    state comes from a rule, so the model's confidence
+        #               describes a different class entirely
+        #   recovered   same
+        #   smoothing   the displayed state is deliberately held through a
+        #               transition, so it can differ from the raw class the
+        #               confidence belongs to
+        #
+        # Module 8 persists this field, so a wrong value does not merely
+        # mislead a reader - it accumulates.
         if fatigue_result["fatigued"]:
             state, source = "fatigued", contracts.SOURCE_RULE
+            # How much of the recent history breached the low-openness
+            # threshold. 0.80 is the firing point; higher means more of the
+            # window agreed. Already computed, already 0-1, and it is evidence
+            # about fatigue rather than about a model class.
+            confidence = fatigue_result["fatigue_ratio"]
         elif recovery_result["recovered"]:
             state, source = "recovered", contracts.SOURCE_RULE
+            # Deterministic: fires when a sustained bad run is followed by a
+            # confirmed return to focused, and it consumes the SMOOTHED state,
+            # so the trigger is already confirmed rather than one noisy frame.
+            # There is no graded evidence to report. RULE_CERTAIN says the
+            # rule's condition was met - not that the learner has certainly
+            # recovered. See docs/model/model-card.md for what the rule can
+            # and cannot support.
+            confidence = contracts.RULE_CERTAIN
         elif dt_result["deep_thinking"]:
             state, source = smoothed["state"], contracts.SOURCE_HYBRID
+            confidence = contracts.confidence_for(prediction, state)
         else:
             state, source = smoothed["state"], contracts.SOURCE_MODEL
+            confidence = contracts.confidence_for(prediction, state)
 
         event = contracts.build_engagement_event(
             user_id=uid,
             session_id=session_id,
             state=state,
-            confidence=prediction["confidence"],
+            confidence=confidence,
             source=source,
             features=contracts.mean_features(sequence),
             content_id=payload.content_id,
