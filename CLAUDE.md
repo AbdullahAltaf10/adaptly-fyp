@@ -22,9 +22,15 @@ heatmaps).
 **Supervisor:** Dr. Sumera Hayat Khan
 **Repo:** `https://github.com/AbdullahAltaf10/adaptly-fyp` (monorepo)
 **Team:**
-- Syed Sibtain Haider — 231589 — CV/ML pipeline & training, coordination
+- Syed Sibtain Haider — 231589 — CV/ML pipeline & training, coordination, **and Module 4 (Adaptive Intervention), merged via PR #48**
 - M. Hassan Jamshaid — 231574 — has completed his 3 modules independently, currently integrating them into this shared repo
 - **Abdullah Altaf — 231625 — this is me, the person Claude Code is assisting**
+
+> A second doc, `ADAPTLY_PROJECT_HANDOFF.md`, circulates among the team but is **not** committed
+> to this repo — it was shared out-of-band and is a dated snapshot, not a live source. Treat any
+> such external doc the same way as this one: useful history and rationale, never trusted for
+> current state. The traps/gotchas from it worth keeping have been folded into this file (Section
+> 10) so they live in the repo instead of a file only some teammates have.
 
 ---
 
@@ -34,15 +40,16 @@ heatmaps).
 |---|---|
 | Frontend | React.js |
 | Backend | Python / FastAPI |
-| Real-time comms | WebSocket (browser → backend camera feature streaming) |
-| Computer Vision | MediaPipe FaceMesh / BlazeFace (in-browser landmark extraction) |
-| ML Training | PyTorch (LSTM engagement classifier, gaze regression CNN/SVM) |
-| PDF Processing | PyMuPDF |
-| Video Transcription | OpenAI Whisper |
-| Web Content Extraction | BeautifulSoup / newspaper3k |
-| LLM | Google Gemini (simplification, agent, summaries, insight reports) |
-| Text-to-Speech | Google TTS |
-| Database | MongoDB |
+| Real-time comms | **Actually HTTP POST once per second today, not WebSocket.** A WebSocket upgrade is a known, not-yet-done gap — see Section 10. |
+| Computer Vision | MediaPipe FaceLandmarker (Tasks API, in-browser landmark extraction, 478 points) |
+| ML Training | **TensorFlow / Keras** (LSTM engagement classifier). Trained on Google Colab (free T4). Gaze regression / re-reading detection is a stub (`gaze_regression_detected` always `false`) — not built. |
+| PDF Processing | `pypdf` (standard) + `pymupdf` (column-aware research-paper extraction) |
+| Video Transcription | OpenAI Whisper (via `openai` package; inactive without `OPENAI_API_KEY`) |
+| Web Content Extraction | BeautifulSoup |
+| LLM | Google Gemini (`google-genai>=2.0`) — Module 4 content simplification, Module 5 assistant, Module 8 insight reports. All three read the same `GEMINI_API_KEY`/`GEMINI_MODEL` env vars, one key for the whole app. |
+| Text-to-Speech | Not yet implemented — listed in scope, no code found in repo as of 2026-09-25 |
+| Database | MongoDB Atlas via `pymongo` (needs `certifi`'s CA bundle on Windows — see Section 10) |
+| Auth | Firebase Authentication (email/password + Google) |
 | Design | Figma |
 | VCS | Git / GitHub, `gh` CLI |
 
@@ -68,9 +75,9 @@ heatmaps).
 |---|---|---|
 | 1 | Learner Profile & Access Management | Hassan |
 | 2 | Content Processing | Hassan |
-| 3 | Real-Time Engagement Detection | Sibtain |
-| 4 | Adaptive Intervention & Content Enhancement | Hassan |
-| 5 | Context-Aware AI Assistant | **Abdullah** — ✅ COMPLETED |
+| 3 | Real-Time Engagement Detection | Sibtain — ✅ merged (PR #38-equivalent work + PR #44 evaluation/calibration fixes) |
+| 4 | Adaptive Intervention & Content Enhancement | **Sibtain** — ✅ merged via PR #48 (originally unowned/TBD; Sibtain built and shipped it) |
+| 5 | Context-Aware AI Assistant | **Abdullah** — ⚠️ code complete but **NOT merged**. PR #43 has open review comments from Hassan and Sibtain (destructive router.py/main.py rewrite, CORS breakage, duplicate frontend scaffold, `pyproject.toml` vs `requirements.txt` conflict, `google-genai` version conflict with Module 4). Deferred until Module 8 finishes — see `module-5-review-findings` if using project memory, or PR #43's comment thread directly. |
 | 6 | CV–AI Integration Layer | Sibtain |
 | 7 | Audio Content Generation | Sibtain |
 | 8 | Session Analytics & Insight Reporting | **Abdullah** — 🔨 CURRENT FOCUS (see Section 6) |
@@ -169,6 +176,12 @@ EVENTS → DOMAIN METRICS (pure, no infra deps) → SESSION ANALYTICS (orchestra
 10 issues, dependency-ordered. **Status below was confirmed by directly inspecting the repo
 (`git remote -v`, `git branch -a`, `git log`, `git status`) on 2026-08-25 — but branches/commits
 move, so re-verify with `git status` / `gh issue list` before trusting it blindly.**
+
+> **⚠️ Superseded — kept for history only.** The snapshot below is from 2026-08-25, before Issue
+> #26 was even committed. Issues #25–#31 and #45/#46 are now merged into `develop`, and #32 is in
+> review as PR #62 (state current as of 2026-09-25 — see Section 11, and `docs/module-8/README.md`
+> for the live progress table). Do not treat anything below this line as current; it's left in
+> place to show the reasoning trail, not as a status source.
 
 **CONFIRMED REAL STATE (as of last check):**
 - `origin/develop` exists. Currently contains: project structure (PR #1) + shared data contracts
@@ -438,11 +451,85 @@ For each issue:
 
 ---
 
-## 9. What I need Claude Code to do right now
+## 9. Module 3 essentials (for anyone building on top of its output, not just Sibtain)
 
-Focus exclusively on **Module 8**. Immediate first step: verify the true current state of
-**Issue #26** (branch `feature/26-module-8-metric-engine` — is it committed, pushed, PR'd,
-merged into `develop`?). If incomplete, finish that properly first. Only then move to
-**Issue #27 — Add Module 8 analytics persistence and indexes**, following the working method in
-Section 6.8, respecting the contracts in Section 6.3, and never violating the semantic rules in
-Section 6.5.
+Modules 4, 5, 6 and 8 all consume what Module 3 produces, so getting this wrong ripples widely.
+Full detail lives in `docs/model/model-card.md`; this is the summary every other module needs.
+
+- **Five engagement states, only three come from the model.** `focused`, `drifting`,
+  `struggling` are LSTM output; `fatigued` and `recovered` are rule-based (DAiSEE has no fatigue
+  dimension, and "recovered" needs a comparison across time a single clip can't express). Every
+  engagement event carries a `source` field: `lstm`, `rule`, or `hybrid`.
+- **`confidence` describes the reported state, not the model's top class** (fixed in PR #44's
+  `confidence_for()` — before that fix it reported the wrong probability in 3 scenarios). If you
+  persist or display confidence, make sure you're on a branch with that fix.
+- **Never quote raw accuracy for this model — use per-class recall / macro F1.** A classifier
+  that always guesses "focused" scores 84.7% on the same test set; accuracy just measures class
+  imbalance here. Struggling recall is the product-critical number and sits around 10–18%
+  (improved to ~15/19 subjects with PR #44's per-subject calibration).
+- **`blink_rate` is not a real blink rate.** It's byte-identical to `eye_openness` — a real blink
+  (100–400ms) can't be measured at a 1-frame-per-second sample rate. Don't build anything that
+  depends on it meaning what its name implies.
+- **The model does not consume real head-pose degrees.** `solvePnP` is implemented and used by
+  rule detectors, but the LSTM was fitted on a simplified geometric estimate on a different scale.
+  Consequence: **opening your mouth reads as "struggling"**, because the simplified estimate uses
+  the chin — not because confusion was detected. Never demo this as confusion detection.
+- **`gaze_regression_detected` (re-reading detection) is always `false` — it's an unbuilt stub**,
+  not a working feature with a bug. Don't build downstream logic that assumes it ever fires.
+- **Layout constraint for anyone building UI the learner reads during a session:** don't put text
+  in the lower part of the screen. Looking down lowers eye-openness and reads as "fatigued" —
+  a sensing limitation, not something a threshold tweak fixes.
+- **Never validated on real users** — all published numbers are against DAiSEE (80% male,
+  controlled recording conditions), not this system's actual learners.
+
+---
+
+## 10. Traps & gotchas (merged in from team handoff notes, so they live in the repo)
+
+These cost someone real time to discover. Read before you hit the same wall.
+
+- **CORS must stay a regex, not a fixed origin list.** Vite silently moves to 5174, 5175... when
+  5173 is taken, and browsers treat `localhost` and `127.0.0.1` as different origins. The correct,
+  deliberate setting is `allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$"` — replacing
+  it with a fixed list is the single most common cause of an opaque "Network Error" that looks
+  like an auth bug. Tighten it before deployment, don't replace it now.
+- **`certifi` is required for MongoDB Atlas on Windows.** Without `tlsCAFile=certifi.where()`,
+  writes silently fail to appear in Atlas — no error, just missing data.
+- **Windows clock drift causes Firebase 401s** (`Token used too early`). Fix: Settings → Time &
+  Language → Sync now.
+- **Never run `npm audit fix --force`** — it upgraded Vite past the installed Node version and
+  broke the project once already.
+- **TensorFlow must be imported lazily, never at module load** — importing it at import time costs
+  ~20 seconds of backend startup. It's lazy now with a background warm-up thread; keep it that way.
+- **`.gitattributes` is load-bearing for `ml/artifacts/`.** `ml/artifacts/** -text` must stay
+  *below* `* text=auto` (last matching rule wins). Without it, git rewrites the model artifact's
+  line endings on checkout, its SHA-256 changes, and `verify_artifacts()` fails on a file nobody
+  actually edited.
+- **Watch for missing trailing newlines in `.gitignore` and `requirements.txt`.** A missing
+  newline once fused two package names into one invalid line and made the backend uninstallable
+  for the whole team (Issue #5).
+- **Don't inspect FastAPI routes via `app.routes`** — lazy `_IncludedRouter` objects make it look
+  like nothing is registered even when it is. Use `/openapi.json` instead.
+- **`Closes #N` in a PR description does not auto-close the issue on this repo.** GitHub only
+  auto-closes when a PR merges into the *default* branch (`main`), and everything here merges into
+  `develop`. Close issues by hand.
+- **Commit whenever something works, not only when the whole task is done.** A `git stash pop` on
+  this project once permanently deleted two files that had never been committed.
+- **Verify ML thresholds against a live face, not just synthetic test fixtures.** The head-pose
+  sign was wrong three separate times; each time the unit tests encoded the same wrong assumption
+  and passed against a gate that could never fire in reality.
+
+---
+
+## 11. What I need Claude Code to do right now
+
+Module 8 is the active focus. As of 2026-09-25: Issues #25–#31 and #45/#46 are merged into
+`develop`; Issue #32 (Gemini insight report) is implemented and open as PR #62, awaiting review
+from Sibtain/Hassan; Issue #33 (multi-session learning profile) is the current work. Verify this
+against `git log`/`gh pr list` before trusting it — this section goes stale fast, same as
+everything else in this file (see Rule #1 at the top).
+
+Follow the working method in Section 6.8, respect the contracts in Section 6.3, and never violate
+the semantic rules in Section 6.5. Issue #33 in particular: follow `learning-profile.schema.json`
+exactly rather than the issue's prose where they differ (see Section 6.3's contract rule) — flag
+any mismatch in the PR rather than silently extending the contract.
