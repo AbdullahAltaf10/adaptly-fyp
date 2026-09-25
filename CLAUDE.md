@@ -198,7 +198,7 @@ move, so re-verify with `git status` / `gh issue list` before trusting it blindl
 | **31** | Add Module 8 engagement timeline and intervention log | Not started | #26, #29, #30 |
 | **32** | Implement Module 8 Gemini insight report and fallback | Not started | #25, #28 |
 | **33** | Build Module 8 multi-session learning profile | Not started | #25, #28, #29 |
-| **34** | Integrate Module 8 with Modules 3, 4, and 5 | Not started — final hardening/integration issue | #25–#33, working Module 3/4/5 event producers |
+| **34** | Integrate Module 8 with Modules 3, 4, and 5 | **In progress, all three producers wired.** Module 5 (this branch): assistant events now flow into `AssistantEventRepository` via `app/ai_assistant/analytics_sink.py`, two events per exchange (`direction: learner`/`assistant`); `/assistant/messages` now requires auth; frontend sends real `input_mode`. Module 3 (engagement events via `analytics_sink.py`) and Module 4 (`intervention/store.py` refactored to a facade over `InterventionEventRepository`) are tracked separately in PR #67 — **not yet merged as of this writing**, so don't assume those two exist on `develop` until confirmed with `git log`/`gh pr view 67`. Component-level wiring only; full end-to-end flow and Module 10/11 readiness not separately verified — see "Known follow-ups" in §6.9. | #25–#33 (all merged except #32, in review as PR #62) |
 
 **Dependency shape:**
 ```
@@ -388,8 +388,31 @@ For each issue:
 - [ ] Dashboard shell + timeline/intervention log UI (#30, #31)
 - [ ] Gemini insight report + deterministic fallback (#32)
 - [ ] Multi-session learning profile with evidence thresholds (#33)
-- [ ] Real integration with Modules 3/4/5, mock removal, end-to-end flow (#34)
+- [~] Real integration with Modules 3/4/5 (#34): all three producers now wire into Module 8's
+      real repositories (Module 3 direct sink, Module 4 facade — both PR #67, not yet merged;
+      Module 5 sink + auth + input_mode — this branch). Not yet done: a verified end-to-end
+      flow test and Module 10/11 downstream readiness confirmation.
 - [ ] Module 10/11 downstream readiness confirmed
+
+**Known follow-ups from #34 (Module 5):**
+- `analytics_contracts.py`'s `intent` field is always `"unknown"` — a documented placeholder,
+  not real classification. No intent classifier exists in Module 5 today; building one is
+  separate work, not part of this wiring.
+- `api.py` records `model_name=None` on every error path (`AssistantConfigurationError`,
+  `AssistantProviderError`, `AssistantProviderTimeoutError`), even when a real Gemini call was
+  attempted and failed. `service.py`'s exception paths don't currently carry the attempted
+  model name back out to the caller; threading it through would widen
+  `create_assistant_response`'s error handling beyond what this issue's wiring needed. See the
+  comment directly above the try/except chain in `api.py`.
+- `suggested_question_used`, `intent`, and `learner_signal` are mirrored onto both the learner
+  and assistant events for one exchange, since the contract has no neutral "not applicable to
+  this direction" value for any of the three (unlike `input_mode`/`response_mode`, which do).
+  This is a judgement call made in `analytics_contracts.py`'s own module docstring, not
+  something the contract dictates — worth a second opinion if anyone disagrees with the
+  interpretation.
+- No end-to-end test exists that runs a real learner session through Module 3 → Module 4 →
+  Module 5 → Module 8 and confirms the analytics collections end up populated correctly
+  together. Each module's wiring is unit/component-tested in isolation.
 
 ---
 
