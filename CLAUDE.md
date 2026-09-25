@@ -77,7 +77,7 @@ heatmaps).
 | 2 | Content Processing | Hassan |
 | 3 | Real-Time Engagement Detection | Sibtain — ✅ merged (PR #38-equivalent work + PR #44 evaluation/calibration fixes) |
 | 4 | Adaptive Intervention & Content Enhancement | **Sibtain** — ✅ merged via PR #48 (originally unowned/TBD; Sibtain built and shipped it) |
-| 5 | Context-Aware AI Assistant | **Abdullah** — ⚠️ code complete but **NOT merged**. PR #43 has open review comments from Hassan and Sibtain (destructive router.py/main.py rewrite, CORS breakage, duplicate frontend scaffold, `pyproject.toml` vs `requirements.txt` conflict, `google-genai` version conflict with Module 4). Deferred until Module 8 finishes — see `module-5-review-findings` if using project memory, or PR #43's comment thread directly. |
+| 5 | Context-Aware AI Assistant | **Abdullah** — ✅ merged. PR #43 is closed; PR #65 rebuilt it cleanly on current `develop` and resolved all of Hassan/Sibtain's review findings (router registration, CORS, frontend scaffold, dependency manifest, `google-genai` version). `/assistant/messages` is registered and live. |
 | 6 | CV–AI Integration Layer | Sibtain |
 | 7 | Audio Content Generation | Sibtain |
 | 8 | Session Analytics & Insight Reporting | **Abdullah** — 🔨 CURRENT FOCUS (see Section 6) |
@@ -551,11 +551,11 @@ These cost someone real time to discover. Read before you hit the same wall.
 
 ## 11. What I need Claude Code to do right now
 
-Module 8 is the active focus. As of 2026-09-25: Issues #25–#31 and #45/#46 are merged into
-`develop`; Issue #32 (Gemini insight report) is implemented and open as PR #62, awaiting review
-from Sibtain/Hassan; Issue #33 (multi-session learning profile) is the current work. Verify this
-against `git log`/`gh pr list` before trusting it — this section goes stale fast, same as
-everything else in this file (see Rule #1 at the top).
+Module 8 is the active focus. As of 2026-09-25: Issues #25–#31 (#31 shipped as PR #60) and
+#45/#46 are merged into `develop`; Issue #32 (Gemini insight report) is implemented and open as
+PR #62, awaiting review from Sibtain/Hassan; Issue #33 (multi-session learning profile, shipped
+as PR #63) is merged into `develop`. Verify this against `git log`/`gh pr list` before trusting
+it — this section goes stale fast, same as everything else in this file (see Rule #1 at the top).
 
 Follow the working method in Section 6.8, respect the contracts in Section 6.3, and never violate
 the semantic rules in Section 6.5. Issue #33 in particular: follow `learning-profile.schema.json`
