@@ -8,8 +8,8 @@ instance instead of a real MongoDB connection — the same pattern used for
 
 from __future__ import annotations
 
-from backend.app.analytics.persistence.client import get_database
-from backend.app.analytics.service.finalization import AnalyticsRepositories
+from app.analytics.persistence.client import get_database
+from app.analytics.service.finalization import AnalyticsRepositories
 
 
 def get_repositories() -> AnalyticsRepositories:

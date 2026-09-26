@@ -21,24 +21,24 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from backend.app.analytics.domain.metrics import (
+from app.analytics.domain.metrics import (
     DEFAULT_CONFIG,
     MetricConfig,
     build_session_summary,
 )
-from backend.app.analytics.persistence.base import format_timestamp, utc_now
-from backend.app.analytics.persistence.events import (
+from app.analytics.persistence.base import format_timestamp, utc_now
+from app.analytics.persistence.events import (
     AssistantEventRepository,
     EngagementEventRepository,
     InterventionEventRepository,
 )
-from backend.app.analytics.persistence.learning_profiles import (
+from app.analytics.persistence.learning_profiles import (
     LearningProfileRepository,
 )
-from backend.app.analytics.persistence.session_analytics import (
+from app.analytics.persistence.session_analytics import (
     SessionAnalyticsRepository,
 )
-from backend.app.analytics.persistence.sessions import (
+from app.analytics.persistence.sessions import (
     ChunkProgressRepository,
     SessionRepository,
 )

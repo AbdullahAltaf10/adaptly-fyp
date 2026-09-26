@@ -32,7 +32,7 @@ import SignInPage from "./auth/SignInPage";
 import VerifyEmailPage from "./auth/VerifyEmailPage";
 import AppShell from "./routes/AppShell";
 import RequireAuth from "./routes/RequireAuth";
-import AnalyticsDashboard from "./pages/AnalyticsDashboard";
+import AnalyticsDashboardContainer from "./pages/AnalyticsDashboardContainer";
 import StudySession from "./pages/StudySession";
 import { Card, CenteredPage } from "./ui";
 
@@ -77,17 +77,6 @@ function LibraryPlaceholder() {
       </p>
     </Card>
   );
-}
-
-/**
- * The dashboard still reads mock data by default (`useSessionAnalytics`).
- *
- * Threading the just-finished session's id through from `StudySession` is its
- * own change. Naming that here keeps the route honest rather than presenting
- * sample numbers as a real session.
- */
-function AnalyticsRoute() {
-  return <AnalyticsDashboard session={{ sessionId: "demo-session", status: "completed" }} />;
 }
 
 export default function App() {
@@ -139,7 +128,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/library" replace />} />
           <Route path="/library" element={<LibraryPlaceholder />} />
           <Route path="/study" element={<StudySession />} />
-          <Route path="/analytics" element={<AnalyticsRoute />} />
+          <Route path="/analytics" element={<AnalyticsDashboardContainer />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
 

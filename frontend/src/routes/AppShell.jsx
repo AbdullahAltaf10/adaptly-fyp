@@ -13,6 +13,7 @@
  *   does not tell a screen-reader user which one they are on.
  */
 
+import { useLayoutEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 
@@ -31,6 +32,42 @@ function navClass({ isActive }) {
     "px-3 py-2 rounded-md text-sm font-medium",
     isActive ? "bg-accent text-on-accent" : "text-ink hover:bg-page",
   ].join(" ");
+}
+
+/**
+ * Provides the page's one <main> landmark - unless the page inside already
+ * brought its own.
+ *
+ * A screen has to have exactly one: screen-reader users jump to it directly,
+ * and two make that shortcut ambiguous. Pages written before this shell existed
+ * (the analytics dashboard, for one) render their own <main>, and nesting ours
+ * around it produced two. Rather than edit every such page, the frame checks
+ * what it was handed and steps back to a plain <div> when a page owns the
+ * landmark. Pages that do not (settings, library, study) get ours.
+ *
+ * Measured after render rather than guessed from the route, so a page that
+ * starts or stops rendering its own is handled without anyone updating a list.
+ */
+function MainLandmark({ children }) {
+  const ref = useRef(null);
+  const [pageOwnsMain, setPageOwnsMain] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const check = () => setPageOwnsMain(Boolean(el.querySelector("main, [role='main']")));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(el, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  const Tag = pageOwnsMain ? "div" : "main";
+  return (
+    <Tag ref={ref} id="main" className="max-w-5xl mx-auto px-4 py-6">
+      {children}
+    </Tag>
+  );
 }
 
 export default function AppShell() {
@@ -87,9 +124,9 @@ export default function AppShell() {
         </div>
       </header>
 
-      <main id="main" className="max-w-5xl mx-auto px-4 py-6">
+      <MainLandmark>
         <Outlet />
-      </main>
+      </MainLandmark>
     </div>
   );
 }
