@@ -12,19 +12,14 @@ learner exclusively through the `get_current_user_id` dependency
 (`backend/app/api/deps.py`). No endpoint accepts or trusts a client-supplied
 `user_id`.**
 
-> **TEMPORARY:** Module 1's real authentication (Firebase-based) is not yet
-> merged into `develop`. Until it is, `get_current_user_id` reads a dev-only
-> header instead of verifying a real credential:
->
-> ```
-> X-Dev-User-Id: <user_id>
-> ```
->
-> Missing this header returns `401 Unauthorized`. This is explicitly a
-> placeholder — see Issue #34 for the real integration. Swapping in real
-> auth later only requires changing the body of `get_current_user_id`; no
-> endpoint code changes, because every endpoint already depends on it rather
-> than reading `user_id` from anywhere else.
+Module 1's real authentication (Firebase-based) is merged into `develop`.
+`get_current_user_id` requires a verified Firebase ID token:
+
+```
+Authorization: Bearer <firebase_id_token>
+```
+
+A missing or invalid token returns `401 Unauthorized`.
 
 ## Ownership and existence errors
 
