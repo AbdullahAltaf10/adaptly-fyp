@@ -12,20 +12,22 @@
 import { signInWithPopup, signOut } from "firebase/auth";
 import { useState } from "react";
 
+import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 import { useAuth } from "./auth/AuthContext";
 import { auth, googleProvider } from "./auth/firebase";
 import ComplianceReportPage from "./pages/ComplianceReportPage";
 import HrComplianceReportsPage from "./pages/HrComplianceReportsPage";
 import StudySession from "./pages/StudySession";
 
-// Module 10 (Issue #81): reachable, not really routed -- same reasoning as
-// Module 8's own dashboard toggle (see PR #86, which adds an equivalent
-// button for AnalyticsDashboard on a separate branch): this file has no
-// router, and introducing one isn't this issue's call to make unilaterally.
-// Whoever merges #86 and this one together will need to reconcile two
-// independent view-toggle additions into one navigation -- expected, not a
-// bug in either PR.
+// Module 8 (Issue #81) and Module 10 (Issue #81) each added a view toggle on
+// separate branches (PR #86 for the analytics dashboard, this stack for the
+// compliance report views) -- this file still has no router, and introducing
+// one isn't either issue's call to make unilaterally, so both toggles are
+// reconciled here into one plain multi-way view switch. `react-router-dom`
+// is already a dependency but unused anywhere in the app -- worth a look if
+// a real router is wanted instead.
 const VIEW_STUDY_SESSION = "study_session";
+const VIEW_ANALYTICS_DASHBOARD = "analytics_dashboard";
 const VIEW_COMPLIANCE_REPORT = "compliance_report";
 const VIEW_HR_COMPLIANCE_REPORTS = "hr_compliance_reports";
 
@@ -103,6 +105,9 @@ export default function App() {
           <button onClick={() => setView(VIEW_STUDY_SESSION)} style={{ marginLeft: "1rem" }}>
             Study session
           </button>
+          <button onClick={() => setView(VIEW_ANALYTICS_DASHBOARD)}>
+            Analytics dashboard
+          </button>
           <button onClick={() => setView(VIEW_COMPLIANCE_REPORT)}>
             Compliance report
           </button>
@@ -125,10 +130,17 @@ export default function App() {
           highContrast={profile?.accessibility_settings?.contrast === "high"}
         />
       )}
-      {/* No completed-session id is threaded up from StudySession to App
-          yet (same known limitation PR #86 documents for Module 8's
-          dashboard) -- ComplianceReportPage's default mock fetcher renders
-          representative data instead of nothing. */}
+      {/* No completed-session id is threaded up from StudySession to App yet
+          (a separate, larger change), so this shows representative mock
+          data rather than nothing -- the same mock default AnalyticsDashboard
+          already falls back to when no real fetcher is given. Wiring the
+          real just-finished session's id through is follow-up work. */}
+      {view === VIEW_ANALYTICS_DASHBOARD && (
+        <AnalyticsDashboard session={{ sessionId: "demo-session", status: "completed" }} />
+      )}
+      {/* Same known limitation as the analytics dashboard above --
+          ComplianceReportPage's default fetcher renders representative data
+          instead of nothing until a real session id is threaded through. */}
       {view === VIEW_COMPLIANCE_REPORT && (
         <ComplianceReportPage sessionId="demo-session" />
       )}
