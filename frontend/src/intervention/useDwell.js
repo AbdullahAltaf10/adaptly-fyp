@@ -1,19 +1,16 @@
 /**
  * How long the learner has been on the chunk they are actually reading.
  *
- * This is the one part of Module 4's frontend that cannot be finished yet:
- * there is no content viewer, so there are no chunk elements to watch. Issue
- * #12 is where that lands.
+ * This was written as a seam before there was anything to watch: nothing
+ * registered, `chunkId` stayed null, `seconds()` returned 0, and the two
+ * dwell-gated interventions could never fire however long someone stared at a
+ * hard paragraph. `ContentViewer` closes that (issue #47) by calling
+ * `register(chunk_id, element)` for every chunk it renders — and it did so
+ * with no change to this file, the capture loop, or the backend, which is what
+ * the seam was for.
  *
- * What is here is the seam, and it is deliberately small. The viewer calls
- * `register(chunkId, element)` once per chunk as it renders them, and dwell
- * starts flowing with no change to this file, to the capture loop, or to the
- * backend. Until then nothing registers, `chunkId` stays null and
- * `seconds()` returns 0 - which is exactly the behaviour today, where the
- * dwell-gated interventions simply never fire.
- *
- * Two decisions that belong to Module 4 rather than to whoever builds the
- * viewer, which is why this is not left for them:
+ * Two decisions that belong to Module 4 rather than to the viewer, which is
+ * why they live here and not there:
  *
  * **Dwell is the most visible chunk, not any visible chunk.** A paragraph
  * halfway out of the viewport is not being read.
