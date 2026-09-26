@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from backend.app.compliance.domain.critical_sections import (
+from app.compliance.domain.critical_sections import (
     build_critical_section_evidence,
 )
 

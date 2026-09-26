@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from backend.app.compliance.domain.report import build_compliance_report
+from app.compliance.domain.report import build_compliance_report
 from backend.tests.analytics.test_metrics import assert_schema_match
 from backend.tests.compliance import fixtures
 

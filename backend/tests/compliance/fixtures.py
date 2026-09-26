@@ -1,6 +1,6 @@
 """Minimal session-summary fragments for Module 10 score-engine tests.
 
-Only the subsections ``backend.app.compliance.domain.score`` actually reads
+Only the subsections ``app.compliance.domain.score`` actually reads
 are populated (``duration_seconds``, ``engagement_distribution``,
 ``critical_section_engagement``, ``recovery_metrics``, ``assistant_usage``,
 ``data_quality``). This intentionally does not reuse
