@@ -13,6 +13,8 @@
 
 import { useState } from "react";
 
+import ContentViewer from "../content/ContentViewer";
+import { useContent } from "../content/useContent";
 import { useEngagementCapture } from "../engagement/useEngagementCapture";
 import { useFacePresence } from "../engagement/useFacePresence";
 import InterventionHost from "../intervention/InterventionHost";
@@ -35,16 +37,24 @@ function describeState(state) {
 export default function StudySession({ contentId, chunkId, highContrast = false }) {
   const [started, setStarted] = useState(false);
 
-  // Nothing registers a chunk until a content viewer exists (issue #12), so
-  // `seconds()` returns 0 and the dwell-gated interventions stay out of reach.
-  // The viewer will call `dwell.register(chunkId, element)` as it renders,
-  // and they start firing with no change here.
+  const document_ = useContent(contentId);
+
+  // `ContentViewer` calls `dwell.register(chunk_id, element)` for every chunk
+  // it renders (issue #47), so the most-visible chunk and how long it has been
+  // read are both real numbers now. Before this, nothing registered, dwell
+  // stayed 0, and `simplify_content` and `bullet_summary` could never be
+  // offered however long someone stared at a hard paragraph.
   const dwell = useDwell({ enabled: started });
+
+  // The chunk the learner is actually on beats whatever was passed in. The
+  // prop stays as the fallback for a session with no document (the camera-only
+  // path this page started as), and so the caller can pin a chunk in a test.
+  const activeChunkId = dwell.chunkId ?? chunkId;
 
   const capture = useEngagementCapture({
     active: started,
     contentId,
-    chunkId,
+    chunkId: activeChunkId,
     getDwellSeconds: dwell.seconds,
   });
   const presence = useFacePresence({
@@ -371,6 +381,23 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
                 }}
               />
             </div>
+          </div>
+        )}
+
+        {/* What the learner is here to read. Above the support, so an offer
+            appears under the text it is about rather than pushing it down. */}
+        {contentId && (
+          <div style={{ width: "100%", maxWidth: "620px", textAlign: "left" }}>
+            {document_.loading && <p>Loading the document...</p>}
+            {document_.error && (
+              <p style={{ color: "#b3261e" }}>{document_.error}</p>
+            )}
+            {document_.content && (
+              <ContentViewer
+                content={document_.content}
+                onChunkRef={dwell.register}
+              />
+            )}
           </div>
         )}
 
