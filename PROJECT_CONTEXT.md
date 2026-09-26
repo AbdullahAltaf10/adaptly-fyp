@@ -492,9 +492,13 @@ Full detail lives in `docs/model/model-card.md`; this is the summary every other
   `confidence_for()` — before that fix it reported the wrong probability in 3 scenarios). If you
   persist or display confidence, make sure you're on a branch with that fix.
 - **Never quote raw accuracy for this model — use per-class recall / macro F1.** A classifier
-  that always guesses "focused" scores 84.7% on the same test set; accuracy just measures class
-  imbalance here. Struggling recall is the product-critical number and sits around 10–18%
-  (improved to ~15/19 subjects with PR #44's per-subject calibration).
+  that always guesses "focused" scores 84.7% on the same test set. Struggling recall is the
+  product-critical number: **10% on the held-out test set** with the model that actually runs
+  (18% on validation — that gap is split instability, not a range). Per-subject centring plus a
+  tuned threshold was measured to reach ~0.245 recall and 12 of 19 subjects at the selected
+  operating point, **but the calibrated artifacts are not loaded at runtime**, so nothing in the
+  running system benefits from it yet. Re-measure with `ml/evaluation/calibrated_threshold.py`
+  rather than quoting these numbers second-hand.
 - **`blink_rate` is not a real blink rate.** It's byte-identical to `eye_openness` — a real blink
   (100–400ms) can't be measured at a 1-frame-per-second sample rate. Don't build anything that
   depends on it meaning what its name implies.
