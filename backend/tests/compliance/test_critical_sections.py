@@ -57,6 +57,20 @@ class VerdictTests(unittest.TestCase):
         evidence = build_critical_section_evidence(segments, [_chunk("c3")])
         self.assertEqual(evidence[0]["verdict"], "difficulty_not_recovered")
 
+    def test_difficulty_after_recovery_is_not_recovered(self):
+        # focused -> struggling -> recovered -> struggling: the chunk's last
+        # known state is difficulty, so this must NOT read as
+        # difficulty_then_recovered just because a positive segment exists
+        # somewhere earlier in the chunk's history.
+        segments = [
+            _segment("focused", "c1", start="t0", end="t5", duration=5),
+            _segment("struggling", "c1", start="t5", end="t10", duration=5),
+            _segment("recovered", "c1", start="t10", end="t15", duration=5),
+            _segment("struggling", "c1", start="t15", end="t20", duration=5),
+        ]
+        evidence = build_critical_section_evidence(segments, [_chunk("c1")])
+        self.assertEqual(evidence[0]["verdict"], "difficulty_not_recovered")
+
     def test_not_reached(self):
         segments = [
             _segment("focused", "other-chunk", start="t0", end="t10", duration=10),

@@ -42,11 +42,16 @@ and classified:
 
 - **`sustained_engagement`** — every known-state segment on this chunk is
   `focused` or `recovered`.
-- **`difficulty_then_recovered`** — a `drifting`/`struggling`/`fatigued`
-  segment is followed, later in the same chunk's history, by a
-  `focused`/`recovered` segment.
-- **`difficulty_not_recovered`** — a difficulty segment exists with nothing
-  positive after it.
+- **`difficulty_then_recovered`** — after the chunk's **last**
+  `drifting`/`struggling`/`fatigued` segment, a `focused`/`recovered`
+  segment follows. Anchored on the last difficulty segment, not the first:
+  `focused -> struggling -> recovered -> struggling` is
+  `difficulty_not_recovered`, not `difficulty_then_recovered` — the chunk's
+  most recent known state is difficulty, so the "recovered" label would be
+  describing something that didn't actually happen by the time the learner
+  moved on.
+- **`difficulty_not_recovered`** — the chunk's last known state is a
+  difficulty state (nothing positive follows its last difficulty segment).
 - **`not_reached`** — no timeline segment ever references this chunk.
 - **`insufficient_data`** — every segment referencing this chunk is
   `unknown`.
@@ -90,13 +95,16 @@ chunks; this is the expected, documented state, not a bug to work around.
 
 ## Testing
 
-`backend/tests/compliance/test_critical_sections.py` — 11 tests: each
+`backend/tests/compliance/test_critical_sections.py` — 12 tests: each
 verdict individually; unknown segments being ignored rather than breaking
-continuity; multiple critical chunks each getting their own correct
-verdict in one session; non-critical chunks being excluded entirely; a
-chunk revisited after leaving and returning combining both visits correctly
-(including intervention counts); and both `None` and empty chunk-context
-inputs returning an empty list rather than erroring.
+continuity; a difficulty segment that recurs *after* an earlier recovery
+(`focused -> struggling -> recovered -> struggling`) correctly reading as
+`difficulty_not_recovered`, not `difficulty_then_recovered` (a review
+finding — see "Review fixes" below); multiple critical chunks each getting
+their own correct verdict in one session; non-critical chunks being
+excluded entirely; a chunk revisited after leaving and returning combining
+both visits correctly (including intervention counts); and both `None` and
+empty chunk-context inputs returning an empty list rather than erroring.
 
 `backend/tests/compliance/test_report.py` — 4 tests for
 `build_compliance_report()`: the combined score + evidence shape; an empty
@@ -105,9 +113,23 @@ combined report (with and without critical sections) validating against
 `compliance-report.schema.json`.
 
 Command: `python -m pytest backend/tests/compliance/ -q`
-Result: **35 passed** (17 score-engine + 3 score-only contract, both carried over
-from Issue #72, plus 11 new critical-section tests + 4 new combined-report tests
-in this issue).
+Result: **36 passed** (17 score-engine + 3 score-only contract, both carried over
+from Issue #72, plus 12 critical-section tests + 4 combined-report tests in this
+issue).
+
+## Review fixes
+
+A post-open review of PR #78 found that `_verdict_for_known_states` anchored
+`difficulty_then_recovered` on the chunk's **first** difficulty segment
+rather than its last: a chunk that went
+`focused -> struggling -> recovered -> struggling` was incorrectly reading
+as `difficulty_then_recovered`, even though the learner's last known state
+on that chunk was difficulty — the "recovered" label was describing
+something that had already stopped being true. Fixed to check for a
+positive segment after the **last** difficulty segment instead; a chunk
+whose story ends on difficulty is always `difficulty_not_recovered`
+regardless of what happened earlier. Covered by
+`test_difficulty_after_recovery_is_not_recovered`.
 
 ## Known limitations
 
