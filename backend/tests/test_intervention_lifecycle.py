@@ -40,6 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app.analytics.persistence.field_allowlists import INTERVENTION_EVENT_FIELDS  # noqa: E402
 from app.auth.dependencies import get_current_user  # noqa: E402
 from app.engagement import furrow, routes as engagement_routes  # noqa: E402
 from app.intervention import content, contracts, cooldown, service, store  # noqa: E402
@@ -385,28 +386,12 @@ def test_anything_outside_the_allowlist_is_dropped_before_the_write(fake_store):
     stored = store.get(event["intervention_id"])
     assert "landmarks" not in stored
     assert "tier" not in stored
-    assert set(stored) <= store.ALLOWED_FIELDS
+    assert set(stored) <= INTERVENTION_EVENT_FIELDS
 
 
-def test_the_allowlist_matches_module_8s(fake_store):
-    """
-    store.py is a stand-in for Module 8's repository and must write identical
-    documents. If this drifts, events written before Module 8 merges become
-    subtly different from the ones written after.
-    """
-    module_8_fields = {
-        "schema_version", "intervention_id", "session_id", "user_id",
-        "content_id", "chunk_id", "timestamp", "intervention_type", "reason",
-        "reason_code", "triggering_engagement_state",
-        "triggering_engagement_event_id", "delivery_status", "outcome",
-        "recovery_timestamp", "recovery_duration_seconds", "helped",
-        "policy_version", "model_version",
-        # Added by #54: delivered_at is what recovery is measured from, the
-        # other two are reserved for Module 6's sequencing.
-        "delivered_at", "sequence_id", "step_index",
-    }
-    assert store.ALLOWED_FIELDS == module_8_fields
-    assert store.COLLECTION == "analytics_intervention_events"
+# test_the_allowlist_matches_module_8s removed - store.py now delegates to
+# InterventionEventRepository directly (Issue #34), so there's no longer a
+# separate allowlist that could drift from Module 8's.
 
 
 def test_an_unreachable_database_is_reported_not_raised(fake_store):
