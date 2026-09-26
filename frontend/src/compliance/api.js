@@ -19,6 +19,30 @@ export function getComplianceReport(sessionId) {
   return api.get(`/api/sessions/${sessionId}/compliance-report`);
 }
 
+/**
+ * `getComplianceReport`, unwrapped to just the report body -- the shape
+ * `useComplianceReport`'s `fetchReport` contract expects (mirrors its mock
+ * default, `fetchMockComplianceReport`, which also resolves directly to a
+ * report rather than an axios response).
+ */
+export function fetchComplianceReport(sessionId) {
+  return getComplianceReport(sessionId).then((response) => response.data);
+}
+
+/**
+ * True when a failed `GET .../compliance-report` failed specifically because
+ * no report has been generated yet (the backend's documented 409 shape, see
+ * `backend/app/compliance/api/routes.py::get_compliance_report`), as opposed
+ * to a real error. Lets callers offer a "Generate report" action instead of
+ * just an error message.
+ */
+export function isMissingReportError(err) {
+  return (
+    err?.response?.status === 409 &&
+    err?.response?.data?.detail?.reason_code === "compliance_report_missing"
+  );
+}
+
 /** List reports. hr_admin only (enforced server-side). */
 export function listComplianceReports({ userId, contentId } = {}) {
   return api.get("/api/compliance/reports", {

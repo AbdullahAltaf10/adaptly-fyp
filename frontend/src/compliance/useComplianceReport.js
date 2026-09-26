@@ -1,16 +1,27 @@
 import { useEffect, useState } from "react";
 
-import { fetchMockComplianceReport } from "./mockData";
+import { fetchComplianceReport, isMissingReportError } from "./api";
 
 /**
  * Resolves one session's compliance report. Same shape and swap-point
- * pattern as Module 8's own `useSessionAnalytics`: `fetchReport` defaults to
- * the mock layer, and swapping in the real
- * `GET /api/sessions/{session_id}/compliance-report` endpoint (Issue #74)
- * later only requires changing the default passed here.
+ * pattern as Module 8's own `useSessionAnalytics`: `fetchReport` now
+ * defaults to the real `GET /api/sessions/{session_id}/compliance-report`
+ * endpoint (Issue #74) instead of the mock layer -- tests still pass their
+ * own `fetchReport` (often backed by `./mockData`) to stay isolated from the
+ * network.
+ *
+ * A report that hasn't been generated yet is a distinct `"missing"` status,
+ * not `"error"` -- the backend reports this as a documented 409 (see
+ * `isMissingReportError`), and callers use it to offer a "Generate report"
+ * action instead of just showing failure text.
+ *
+ * `refetch` re-runs the fetch against the same `sessionId` -- used after a
+ * report is generated, so the page doesn't need its own duplicate fetch
+ * logic just to pick up the report that was just created.
  */
-export function useComplianceReport({ sessionId, enabled = true, fetchReport = fetchMockComplianceReport }) {
+export function useComplianceReport({ sessionId, enabled = true, fetchReport = fetchComplianceReport }) {
   const [state, setState] = useState({ status: "idle", data: null, error: null });
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     if (!enabled || !sessionId) {
@@ -26,13 +37,19 @@ export function useComplianceReport({ sessionId, enabled = true, fetchReport = f
         if (!cancelled) setState({ status: "ready", data, error: null });
       })
       .catch((error) => {
-        if (!cancelled) setState({ status: "error", data: null, error });
+        if (cancelled) return;
+        if (isMissingReportError(error)) {
+          setState({ status: "missing", data: null, error: null });
+        } else {
+          setState({ status: "error", data: null, error });
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [sessionId, enabled, fetchReport]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reloadToken exists only to trigger a re-run
+  }, [sessionId, enabled, fetchReport, reloadToken]);
 
-  return state;
+  return { ...state, refetch: () => setReloadToken((token) => token + 1) };
 }

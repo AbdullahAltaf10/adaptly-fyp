@@ -138,12 +138,12 @@ export default function App() {
       {view === VIEW_ANALYTICS_DASHBOARD && (
         <AnalyticsDashboard session={{ sessionId: "demo-session", status: "completed" }} />
       )}
-      {/* Same known limitation as the analytics dashboard above --
-          ComplianceReportPage's default fetcher renders representative data
-          instead of nothing until a real session id is threaded through. */}
-      {view === VIEW_COMPLIANCE_REPORT && (
-        <ComplianceReportPage sessionId="demo-session" />
-      )}
+      {/* Unlike the analytics dashboard above, ComplianceReportPage no
+          longer needs a session id handed to it -- it discovers the
+          learner's most recently completed session itself (Issue #80 Part
+          B, via Module 8's session-history endpoint) and shows a friendly
+          empty state if there isn't one yet. */}
+      {view === VIEW_COMPLIANCE_REPORT && <ComplianceReportPage />}
       {view === VIEW_HR_COMPLIANCE_REPORTS && <HrComplianceReportsPage />}
     </main>
   );
