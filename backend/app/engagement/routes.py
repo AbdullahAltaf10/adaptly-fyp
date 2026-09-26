@@ -27,6 +27,7 @@ from app.engagement import (
 from app.engagement.calibration import apply_calibration, compute_offset, compute_user_baseline
 from app.intervention import service as intervention
 from backend.app.analytics.service import session_lifecycle
+from backend.app.compliance.service import session_hooks as compliance_session_hooks
 from ml.inference import head_pose
 from ml.inference.features import InvalidLandmarksError, extract_features
 from ml.inference.model import predict
@@ -119,6 +120,13 @@ def end_session(payload: SessionRequest, user=Depends(get_current_user)):
     # so a database or analytics problem cannot prevent a session from
     # ending for the learner.
     session_lifecycle.finalize_session_safely(user["uid"], payload.session_id)
+    # Module 10's compliance-report generation (Issue #76). Failure-safe,
+    # same posture as the finalization call directly above: never raises,
+    # so a database or report-generation problem cannot prevent a session
+    # from ending for the learner. Placed after finalization because report
+    # generation reads Module 8's finalized summary -- running it first
+    # would just always hit the "no summary yet" no-op path.
+    compliance_session_hooks.generate_report_safely(user["uid"], payload.session_id)
     return result
 
 
