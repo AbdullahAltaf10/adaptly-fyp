@@ -18,21 +18,21 @@ import mongomock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.app.analytics.api.deps import get_repositories
-from backend.app.analytics.api.routes import (
+from app.analytics.api.deps import get_repositories
+from app.analytics.api.routes import (
     MAX_INSIGHT_RETRY_ATTEMPTS,
     get_gemini_caller,
     router,
 )
-from backend.app.analytics.insights.gemini_client import (
+from app.analytics.insights.gemini_client import (
     GeminiConfigurationError,
     GeminiUnavailableError,
 )
-from backend.app.analytics.service.finalization import (
+from app.analytics.service.finalization import (
     AnalyticsRepositories,
     finalize_session,
 )
-from backend.app.api.deps import get_current_user_id
+from app.api.deps import get_current_user_id
 from backend.tests.analytics.fixtures import fixture, timestamp
 from backend.tests.analytics.test_metrics import assert_schema_match
 

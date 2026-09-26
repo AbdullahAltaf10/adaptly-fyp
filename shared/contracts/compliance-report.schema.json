@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adaptly.local/schemas/compliance-report.schema.json",
+  "title": "Adaptly Compliance Attestation Report",
+  "description": "Shared format for a Module 10 compliance attestation report built on top of one Module 8 session summary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "score_version",
+    "report_id",
+    "session_id",
+    "user_id",
+    "content_id",
+    "generated_at",
+    "source_summary",
+    "status",
+    "engagement_quality_score",
+    "components",
+    "excluded_components",
+    "critical_sections",
+    "data_quality"
+  ],
+  "$defs": {
+    "component_key": {
+      "type": "string",
+      "enum": [
+        "attentional_presence",
+        "critical_section_engagement",
+        "recovery_rate",
+        "chatbot_engagement"
+      ]
+    },
+    "component_status": {
+      "type": "string",
+      "enum": [
+        "included",
+        "not_applicable"
+      ]
+    },
+    "critical_section_verdict": {
+      "type": "string",
+      "enum": [
+        "sustained_engagement",
+        "difficulty_then_recovered",
+        "difficulty_not_recovered",
+        "not_reached",
+        "insufficient_data"
+      ]
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "score_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric_version",
+        "computed_at"
+      ],
+      "properties": {
+        "metric_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "computed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "insufficient_data"
+      ]
+    },
+    "engagement_quality_score": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "score",
+          "weight",
+          "weight_applied",
+          "status",
+          "reason"
+        ],
+        "properties": {
+          "key": {
+            "$ref": "#/$defs/component_key"
+          },
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "weight_applied": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "status": {
+            "$ref": "#/$defs/component_status"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "excluded_components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "reason"
+        ],
+        "properties": {
+          "key": {
+            "$ref": "#/$defs/component_key"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "critical_sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "chunk_id",
+          "verdict",
+          "focused_seconds",
+          "difficulty_seconds",
+          "intervention_count",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verdict": {
+            "$ref": "#/$defs/critical_section_verdict"
+          },
+          "focused_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "difficulty_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "intervention_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "first_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "data_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "has_sufficient_data",
+        "event_coverage_rate",
+        "unknown_duration_seconds",
+        "flags"
+      ],
+      "properties": {
+        "has_sufficient_data": {
+          "type": "boolean"
+        },
+        "event_coverage_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "unknown_duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "flags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "sparse_engagement",
+              "missing_intervention_outcomes",
+              "incomplete_assistant_metadata",
+              "excessive_unknown_gaps",
+              "missing_chunk_context",
+              "incomplete_session_timing",
+              "no_webcam_data"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

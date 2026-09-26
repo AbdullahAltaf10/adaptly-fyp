@@ -18,10 +18,10 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from backend.app.analytics.insights.fallback import build_fallback_report
-from backend.app.analytics.insights.generator import generate_insight_report
-from backend.app.analytics.insights.prompt import build_prompt
-from backend.app.analytics.insights.validation import (
+from app.analytics.insights.fallback import build_fallback_report
+from app.analytics.insights.generator import generate_insight_report
+from app.analytics.insights.prompt import build_prompt
+from app.analytics.insights.validation import (
     InvalidGeminiReportError,
     validate_report_text,
 )
@@ -300,7 +300,7 @@ class GenerateInsightReportTests(unittest.TestCase):
         self.assertTrue(report["fallback_used"])
 
     def test_missing_api_key_falls_back(self) -> None:
-        from backend.app.analytics.insights.gemini_client import GeminiConfigurationError
+        from app.analytics.insights.gemini_client import GeminiConfigurationError
 
         def no_key(prompt: str) -> str:
             raise GeminiConfigurationError("GEMINI_API_KEY is not configured.")
@@ -437,7 +437,7 @@ class GeminiClientConfigTests(unittest.TestCase):
                 os.environ[key] = value
 
     def test_missing_api_key_raises_before_importing_the_sdk(self) -> None:
-        from backend.app.analytics.insights.gemini_client import (
+        from app.analytics.insights.gemini_client import (
             GeminiConfig,
             GeminiUnavailableError,
             call_gemini,
@@ -448,7 +448,7 @@ class GeminiClientConfigTests(unittest.TestCase):
             call_gemini("some prompt", config=config)
 
     def test_load_gemini_config_reads_environment_variables(self) -> None:
-        from backend.app.analytics.insights.gemini_client import load_gemini_config
+        from app.analytics.insights.gemini_client import load_gemini_config
 
         os.environ["GEMINI_API_KEY"] = "test-key"
         os.environ["GEMINI_MODEL"] = "gemini-test-model"
@@ -461,7 +461,7 @@ class GeminiClientConfigTests(unittest.TestCase):
         self.assertEqual(config.timeout_seconds, 5.0)
 
     def test_load_gemini_config_defaults_when_unset(self) -> None:
-        from backend.app.analytics.insights.gemini_client import load_gemini_config
+        from app.analytics.insights.gemini_client import load_gemini_config
 
         os.environ.pop("GEMINI_API_KEY", None)
         os.environ.pop("GEMINI_MODEL", None)
@@ -474,7 +474,7 @@ class GeminiClientConfigTests(unittest.TestCase):
         self.assertEqual(config.timeout_seconds, 20.0)
 
     def test_blank_api_key_is_treated_as_unset(self) -> None:
-        from backend.app.analytics.insights.gemini_client import load_gemini_config
+        from app.analytics.insights.gemini_client import load_gemini_config
 
         os.environ["GEMINI_API_KEY"] = ""
 
@@ -499,7 +499,7 @@ class GeminiClientRetryTests(unittest.TestCase):
             name: sys.modules.get(name)
             for name in ("google", "google.genai", "google.genai.errors", "google.genai.types")
         }
-        from backend.app.analytics.insights import gemini_client
+        from app.analytics.insights import gemini_client
 
         self._gemini_client = gemini_client
         self._sleep_patch = mock.patch.object(gemini_client.time, "sleep", lambda seconds: None)

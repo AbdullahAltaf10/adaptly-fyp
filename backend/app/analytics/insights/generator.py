@@ -16,11 +16,11 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from backend.app.analytics.insights.fallback import build_fallback_report
-from backend.app.analytics.insights.gemini_client import load_gemini_config
-from backend.app.analytics.insights.prompt import build_prompt
-from backend.app.analytics.insights.validation import validate_report_text
-from backend.app.analytics.persistence.base import format_timestamp, utc_now
+from app.analytics.insights.fallback import build_fallback_report
+from app.analytics.insights.gemini_client import load_gemini_config
+from app.analytics.insights.prompt import build_prompt
+from app.analytics.insights.validation import validate_report_text
+from app.analytics.persistence.base import format_timestamp, utc_now
 
 SCHEMA_VERSION = "1.0"
 
