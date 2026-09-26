@@ -68,7 +68,7 @@ export const DELIVERY_STATUS_LABELS = {
 
 /**
  * Outcome for one individual piece of support. Calm, non-judgmental
- * phrasing per CLAUDE.md 6.5 — never "failed"/"ineffective" language aimed
+ * phrasing per PROJECT_CONTEXT.md 6.5 — never "failed"/"ineffective" language aimed
  * at the learner.
  */
 export const OUTCOME_LABELS = {

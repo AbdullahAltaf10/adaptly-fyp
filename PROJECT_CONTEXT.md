@@ -1,5 +1,5 @@
 # Adaptly — Autonomous Neurodiversity-Aware Learning Coach for Online Education
-### FYP Project Context for Claude Code
+### Project Context for AI-Assisted Development
 
 > Read this file fully before doing any work in this repo.
 > **Rule #1: This file gives you architecture, contracts, and history. It does NOT give you
@@ -24,7 +24,7 @@ heatmaps).
 **Team:**
 - Syed Sibtain Haider — 231589 — CV/ML pipeline & training, coordination, **and Module 4 (Adaptive Intervention), merged via PR #48**
 - M. Hassan Jamshaid — 231574 — has completed his 3 modules independently, currently integrating them into this shared repo
-- **Abdullah Altaf — 231625 — this is me, the person Claude Code is assisting**
+- **Abdullah Altaf — 231625 — this is me, the person working with an AI coding assistant on this repo**
 
 > A second doc, `ADAPTLY_PROJECT_HANDOFF.md`, circulates among the team but is **not** committed
 > to this repo — it was shared out-of-band and is a dated snapshot, not a live source. Treat any
@@ -549,7 +549,7 @@ These cost someone real time to discover. Read before you hit the same wall.
 
 ---
 
-## 11. What I need Claude Code to do right now
+## 11. What the Assistant Should Do Right Now
 
 Module 8 is the active focus. As of 2026-09-25: Issues #25–#31 (#31 shipped as PR #60) and
 #45/#46 are merged into `develop`; Issue #32 (Gemini insight report) is implemented and open as

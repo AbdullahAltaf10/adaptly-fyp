@@ -23,11 +23,11 @@ Design decisions worth knowing before reading the code:
    trend" and an "average recovery-duration trend" as if they were separate
    fields. ``learning-profile.schema.json`` (``additionalProperties: false``)
    has no such fields — only one ``focus_trend`` and one ``recovery_trend``
-   enum. Per CLAUDE.md 6.3 ("existing contracts are authoritative"), this
+   enum. Per PROJECT_CONTEXT.md 6.3 ("existing contracts are authoritative"), this
    module computes exactly what the schema defines and does not invent new
    fields to match the issue's informal field list.
 
-2. **The effective-support-methods evidence threshold (CLAUDE.md 6.6, gap
+2. **The effective-support-methods evidence threshold (PROJECT_CONTEXT.md 6.6, gap
    #4)** was explicitly left undefined pending a decision made "via
    config/metric-version/tests, not invented silently." Decided here as
    ``LearningProfileConfig.minimum_evidence_count_for_effective_support``
@@ -37,7 +37,7 @@ Design decisions worth knowing before reading the code:
    ``effective_support_methods`` (it can still appear in
    ``intervention_effectiveness_by_type``, which has no such gate).
 
-3. **Small-sample caution (CLAUDE.md 6.5, rule #7)** governs every trend
+3. **Small-sample caution (PROJECT_CONTEXT.md 6.5, rule #7)** governs every trend
    field: with fewer than ``minimum_sessions_for_trend`` qualifying data
    points, the trend is ``"insufficient_data"`` rather than a guess.
 
@@ -87,7 +87,7 @@ class LearningProfileConfig:
 
     Kept separate from ``metrics.MetricConfig`` (which governs single-session
     calculation) since these thresholds govern a different calculation with
-    its own reproducibility needs — see CLAUDE.md 6.5 rule #4.
+    its own reproducibility needs — see PROJECT_CONTEXT.md 6.5 rule #4.
     """
 
     minimum_sessions_for_profile: int = 2
@@ -199,7 +199,7 @@ def _trend_from_series(
     """Compare the first half of a chronological series to the second half.
 
     Below ``minimum_sessions`` qualifying data points, always
-    ``"insufficient_data"`` — per CLAUDE.md 6.5 rule #7, a trend is never
+    ``"insufficient_data"`` — per PROJECT_CONTEXT.md 6.5 rule #7, a trend is never
     presented off too few points, and a two-point "trend" is not a pattern.
     """
 
