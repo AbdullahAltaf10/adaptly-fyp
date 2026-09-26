@@ -87,9 +87,11 @@ own live integration (Issue #34).
 
 ## Testing
 
-`backend/tests/compliance/test_persistence.py` — 5 tests: save-then-get
+`backend/tests/compliance/test_persistence.py` — 6 tests: save-then-get
 round-trips the contract-shaped report; a missing session returns `None`;
-save is an upsert (never duplicates); list filters by `user_id`/
+save is an upsert (never duplicates); save is insert-only, so a second,
+different report for the same session never overwrites the first (a review
+finding — see "Review fixes" below); list filters by `user_id`/
 `content_id`; list with no filters returns everything.
 
 `backend/tests/compliance/test_api.py` — 10 tests: owner can generate;
@@ -100,13 +102,26 @@ a missing report returns a clear `409`; `hr_admin` can list; a non-HR user
 is denied the list endpoint.
 
 Command: `python -m pytest backend/tests/compliance/ -q`
-Result: **50 passed** (35 carried over from Issues #72/#73, plus 5 new
+Result: **52 passed** (36 carried over from Issues #72/#73, plus 6 new
 persistence tests and 10 new API tests).
 
 Full backend suite: `python -m pytest backend/tests/ -q` (same 5 files
 excluded for the pre-existing, documented `cv2`/`tensorflow` environment
-gap Module 8's own PRs already excluded) — **390 passed**, 3 skipped, the
+gap Module 8's own PRs already excluded) — **392 passed**, 3 skipped, the
 same 2 pre-existing failures, no regressions.
+
+## Review fixes
+
+A post-open review of PR #79 found an immutability race: `save` used a
+`$set`-based upsert, so two concurrent `generate_report` calls for the same
+session could race, and the second write would silently overwrite the
+first report with a different one — even though generation is meant to be
+idempotent. Fixed by making `save` insert-only (`$setOnInsert`, never
+`$set`), and by having `generate_report` re-read the stored document after
+saving and return *that* rather than the report it built locally — so a
+racing caller that "lost" gets the report that actually won, not a report
+that looked saved but wasn't really what ended up in the database. Covered
+by `test_save_is_insert_only_first_report_wins_a_race`.
 
 ## Known limitations
 

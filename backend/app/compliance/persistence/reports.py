@@ -10,9 +10,21 @@ The contract-shaped report is kept verbatim under a ``report`` key, exactly
 the way Module 8's ``SessionAnalyticsRepository`` keeps its contract-shaped
 summary under a ``summary`` key: ``compliance-report.schema.json`` sets
 ``additionalProperties: false``, so persistence-only bookkeeping
-(``created_at``/``updated_at``) must live outside the contract-shaped
-payload, never mixed into it -- otherwise returning the stored document
-verbatim from an API endpoint would fail its own contract.
+(``created_at``) must live outside the contract-shaped payload, never mixed
+into it -- otherwise returning the stored document verbatim from an API
+endpoint would fail its own contract.
+
+``save`` is insert-only (Issue #74 review finding): the first call for a
+``session_id`` wins and every later call is a no-op against the stored
+document, using ``$setOnInsert`` rather than ``$set``. A ``$set``-based
+upsert let two concurrent ``generate_report`` calls for the same session
+race -- the second write would silently overwrite the first report with a
+different one, even though ``generate_report`` itself intends generation to
+be idempotent. ``$setOnInsert`` closes that race at the database level:
+whichever write reaches MongoDB first is the one that sticks, and the
+caller who "lost" the race gets that same stored document back (see
+``service/generation.py``, which now reads the report back after saving
+rather than trusting its own locally-built one).
 """
 
 from __future__ import annotations
@@ -29,6 +41,12 @@ class ComplianceReportRepository:
         self._collection = database[collections.COMPLIANCE_REPORTS]
 
     def save(self, report: Mapping[str, Any], *, now: Any = None) -> str:
+        """Insert-only: the first report saved for a session_id is the one
+        that sticks. A later call is a no-op against whatever is already
+        stored -- see the module docstring for why this must never be a
+        ``$set`` upsert.
+        """
+
         session_id = report["session_id"]
         now_str = format_timestamp(now or utc_now())
         document = {
@@ -36,11 +54,11 @@ class ComplianceReportRepository:
             "user_id": report["user_id"],
             "content_id": report["content_id"],
             "report": filtered(dict(report), COMPLIANCE_REPORT_FIELDS),
-            "updated_at": now_str,
+            "created_at": now_str,
         }
         self._collection.update_one(
             {"_id": session_id},
-            {"$set": document, "$setOnInsert": {"created_at": now_str}},
+            {"$setOnInsert": document},
             upsert=True,
         )
         return session_id

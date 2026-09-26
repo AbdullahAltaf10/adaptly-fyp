@@ -10,11 +10,11 @@ from backend.app.compliance.persistence.reports import ComplianceReportRepositor
 from backend.tests.compliance import fixtures
 
 
-def _report(session_id: str = "session-1", user_id: str = "user-1") -> dict:
+def _report(session_id: str = "session-1", user_id: str = "user-1", *, score: int = 80) -> dict:
     score_result = {
         "score_version": "1.0",
         "status": "complete",
-        "engagement_quality_score": 80,
+        "engagement_quality_score": score,
         "components": [],
         "excluded_components": [],
     }
@@ -47,7 +47,6 @@ class ComplianceReportRepositoryTests(unittest.TestCase):
         stored = self.repository.get("session-1")
         self.assertEqual(stored["report"], report)
         self.assertEqual(stored["session_id"], "session-1")
-        self.assertIn("updated_at", stored)
         self.assertIn("created_at", stored)
 
     def test_get_missing_session_returns_none(self):
@@ -56,6 +55,22 @@ class ComplianceReportRepositoryTests(unittest.TestCase):
     def test_save_is_upsert_keyed_by_session_id_not_duplicated(self):
         self.repository.save(_report())
         self.repository.save(_report())
+        self.assertEqual(self.database["compliance_reports"].count_documents({}), 1)
+
+    def test_save_is_insert_only_first_report_wins_a_race(self):
+        # Two "concurrent" generate calls building different reports for the
+        # same session (Issue #74 review finding): whichever save reaches
+        # the database first must be the one that sticks -- a second,
+        # different report must never silently overwrite it.
+        first_report = _report(score=80)
+        second_report = _report(score=40)
+
+        self.repository.save(first_report)
+        self.repository.save(second_report)
+
+        stored = self.repository.get("session-1")
+        self.assertEqual(stored["report"]["engagement_quality_score"], 80)
+        self.assertEqual(stored["report"], first_report)
         self.assertEqual(self.database["compliance_reports"].count_documents({}), 1)
 
     def test_list_filters_by_user_id_and_content_id(self):

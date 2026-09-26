@@ -89,7 +89,12 @@ def generate_report(
 
     Idempotent: an existing report is returned unchanged, never
     recalculated -- an attestation is a record of what was observed, not a
-    live-recomputed figure (see the Issue #74 doc for why).
+    live-recomputed figure (see the Issue #74 doc for why). Also race-safe:
+    if two calls for the same session run concurrently, both build a report,
+    but ``ComplianceReportRepository.save`` is insert-only, so only the
+    first write actually sticks -- the losing call's ``outcome`` reads
+    ``"already_exists"`` and its ``report`` is the winner's, never its own
+    locally-built one.
     """
 
     session = repositories.analytics.sessions.get(session_id)
@@ -143,4 +148,15 @@ def generate_report(
 
     repositories.compliance_reports.save(report, now=now_str)
 
-    return GenerationResult(outcome="generated", report=report)
+    # `save` is insert-only (Issue #74 review finding): if another
+    # concurrent call generated and saved a report for this exact session
+    # between our own `get` check above and this `save`, that write won and
+    # ours was silently ignored. Reading the report back here -- rather than
+    # trusting the one we just built locally -- means a racing caller always
+    # gets the one report that actually persisted, never a report that looks
+    # saved locally but isn't what's really in the database.
+    stored = repositories.compliance_reports.get(session_id)
+    final_report = stored["report"]
+    outcome = "generated" if final_report == report else "already_exists"
+
+    return GenerationResult(outcome=outcome, report=final_report)
