@@ -116,7 +116,7 @@ reproducible even if the scoring formula changes later.
 
 ## Testing
 
-`backend/tests/compliance/test_score.py` — 20 tests, pure Python, no
+`backend/tests/compliance/test_score.py` — 17 tests, pure Python, no
 MongoDB/FastAPI: all four components present and scorable; each component
 individually excluded (not zero); all components excluded (falls back to
 insufficient data); the `has_sufficient_data: false` override; score floor
@@ -134,7 +134,7 @@ documented Module 8 gap, not something this issue installs a new dependency
 to fix).
 
 Command: `python -m pytest backend/tests/compliance/ -q`
-Result: **23 passed** (20 + 3).
+Result: **20 passed** (17 + 3).
 
 ## Known limitations
 
