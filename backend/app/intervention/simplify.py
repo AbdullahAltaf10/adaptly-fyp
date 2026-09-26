@@ -69,10 +69,25 @@ GENERATED_TYPES = {
 # period" is longer than "ischaemia" and is the entire point.
 #
 # So the guard stays, for the case it is actually useful in: a model that loops,
-# pads, or hands the whole prompt back. 3.0 is above everything measured and
-# still catches a doubling plus commentary. It applies to both tasks now, since
-# runaway output is not specific to one.
-MAX_LENGTH_RATIO = 3.0
+# pads, or hands the whole prompt back. It applies to both tasks, since runaway
+# output is not specific to one.
+#
+# Raised 3.0 -> 3.5 when prompt v2 added the analogy scope 6.4 asks for.
+# Re-measured against real gemini-3.6-flash on five passages rather than
+# guessed:
+#
+#     simplify_content (v2, with analogy)  1.84  2.03  2.12  2.54  2.71
+#                                          mean 2.25, max 2.71
+#     simplify_content (v1, no analogy)    mean 1.57, max 2.29
+#
+# An analogy is an extra sentence or two of everyday language bolted onto a
+# paragraph that was already being lengthened by explaining its terms inline,
+# so the rise is the feature working rather than the model padding. All five
+# did pass at 3.0 - but with 0.29 of headroom, close enough that one fuller
+# analogy starts rejecting good rewrites. 3.5 restores roughly the proportional
+# margin 3.0 had before the analogy existed, and still catches a model that
+# hands back three and a half times the passage.
+MAX_LENGTH_RATIO = 3.5
 
 # Below this there is nothing worth rewriting, and the model tends to pad.
 MIN_PASSAGE_CHARS = 80

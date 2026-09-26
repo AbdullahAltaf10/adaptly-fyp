@@ -35,6 +35,7 @@ from app.content.routes import router as content_router
 from app.engagement.routes import router as engagement_router
 from app.intervention.routes import router as intervention_router
 from app.users.routes import router as users_router
+from backend.app.analytics.api.routes import router as analytics_router
 
 api_router = APIRouter()
 
@@ -52,3 +53,6 @@ api_router.include_router(intervention_router)
 
 # Module 5 - AI Study Assistant
 api_router.include_router(assistant_router)
+
+# Module 8 - Session Analytics & Insight Reporting
+api_router.include_router(analytics_router)

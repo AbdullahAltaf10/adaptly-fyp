@@ -212,17 +212,24 @@ def create_assistant_response(
     request: AssistantMessageRequest,
     settings: AssistantSettings | None = None,
     client_factory: GeminiClientFactory | None = None,
-) -> AssistantMessageResponse:
-    """Select local mock or real Gemini mode using centralized settings."""
+) -> tuple[AssistantMessageResponse, str | None]:
+    """Select local mock or real Gemini mode using centralized settings.
+
+    Returns ``(response, model_name)``: ``model_name`` is ``None`` in mock
+    mode, and the Gemini model that was used when a real provider answered.
+    The caller (api.py) needs this for the assistant analytics event's
+    ``model_name`` field; nothing here otherwise changes.
+    """
     try:
         resolved_settings = settings or AssistantSettings.from_environment()
     except ConfigurationError as error:
         raise AssistantConfigurationError("The assistant service is misconfigured.") from error
 
     if resolved_settings.mode == "mock":
-        return create_mock_response(request)
-    return create_gemini_response(
+        return create_mock_response(request), None
+    response = create_gemini_response(
         request,
         resolved_settings,
         client_factory or create_gemini_client,
     )
+    return response, resolved_settings.gemini_model

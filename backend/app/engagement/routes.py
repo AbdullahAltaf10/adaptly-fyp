@@ -27,6 +27,7 @@ from app.engagement import (
 from app.engagement.analytics_sink import record_engagement_event
 from app.engagement.calibration import apply_calibration, compute_offset, compute_user_baseline
 from app.intervention import service as intervention
+from backend.app.analytics.service import session_lifecycle
 from ml.inference import head_pose
 from ml.inference.features import InvalidLandmarksError, extract_features
 from ml.inference.model import predict
@@ -64,6 +65,10 @@ class AnalyzeRequest(BaseModel):
 
 class SessionRequest(BaseModel):
     session_id: str
+    # Optional and additive: only used by /session/start, to create Module
+    # 8's own session record (Issue #82). /session/end ignores it. Existing
+    # callers that never send it keep working exactly as before.
+    content_id: Optional[str] = None
 
 
 def extract_feature_sequence(frames: List[FrameData]) -> list:
@@ -97,7 +102,9 @@ def extract_feature_sequence(frames: List[FrameData]) -> list:
 @router.post("/session/start")
 def start_session(payload: SessionRequest, user=Depends(get_current_user)):
     """Begin a session, clearing any rule state left over from a previous one."""
-    return session_state.start(user["uid"], payload.session_id)
+    result = session_state.start(user["uid"], payload.session_id)
+    session_lifecycle.create_session_safely(user["uid"], payload.session_id, payload.content_id)
+    return result
 
 
 @router.post("/session/end")
@@ -108,7 +115,12 @@ def end_session(payload: SessionRequest, user=Depends(get_current_user)):
     # here rather than inside session.py so the engagement rules stay a closed
     # set that knows nothing about interventions.
     intervention.on_session_end(user["uid"], payload.session_id)
-    return session_state.end(user["uid"], payload.session_id)
+    result = session_state.end(user["uid"], payload.session_id)
+    # Module 8's own finalization (Issue #82). Failure-safe: never raises,
+    # so a database or analytics problem cannot prevent a session from
+    # ending for the learner.
+    session_lifecycle.finalize_session_safely(user["uid"], payload.session_id)
+    return result
 
 
 @router.post("/calibrate")
