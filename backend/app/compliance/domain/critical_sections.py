@@ -35,14 +35,24 @@ def _critical_chunk_ids(chunk_context: Sequence[Mapping[str, Any]] | None) -> se
 
 
 def _verdict_for_known_states(known_states: Sequence[str]) -> str:
+    """A chunk only counts as recovered if the learner's *most recent* known
+    state on it is positive. Checking against the *first* difficulty segment
+    would call struggling -> recovered -> struggling
+    ``difficulty_then_recovered`` even though the learner's last visit to the
+    chunk left them struggling -- exactly the "recovery" the label promises
+    never actually happened. Anchoring on the last difficulty segment instead
+    means a chunk whose story ends on a difficulty state is always
+    ``difficulty_not_recovered``, regardless of what happened earlier.
+    """
+
     difficulty_indices = [
         index for index, state in enumerate(known_states) if state in DIFFICULTY_STATES
     ]
     if not difficulty_indices:
         return "sustained_engagement"
-    first_difficulty = difficulty_indices[0]
+    last_difficulty = difficulty_indices[-1]
     later_positive = any(
-        state in POSITIVE_STATES for state in known_states[first_difficulty + 1 :]
+        state in POSITIVE_STATES for state in known_states[last_difficulty + 1 :]
     )
     return "difficulty_then_recovered" if later_positive else "difficulty_not_recovered"
 
