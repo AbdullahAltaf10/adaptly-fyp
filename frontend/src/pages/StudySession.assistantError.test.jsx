@@ -50,7 +50,31 @@ vi.mock("../intervention/useIntervention", () => ({
   }),
 }));
 vi.mock("../api/client", () => ({
-  default: { post: vi.fn(() => Promise.reject(new Error("network"))) },
+  default: {
+    post: vi.fn(() => Promise.reject(new Error("network"))),
+    get: vi.fn(() => Promise.reject(new Error("network"))),
+  },
+}));
+// Same reasoning as StudySession.test.jsx: keep this file off the real
+// content fetch (and the Firebase auth it pulls in via ../api/client).
+vi.mock("../content/useContent", () => ({
+  useContent: () => ({ content: null, loading: false, error: null }),
+}));
+vi.mock("../engagement/usePreSessionCheck", () => ({
+  CAMERA_UNKNOWN: "unknown",
+  CAMERA_OK: "ok",
+  CAMERA_DENIED: "denied",
+  CAMERA_MISSING: "missing",
+  CAMERA_FAILED: "failed",
+  usePreSessionCheck: () => ({
+    videoRef: { current: null },
+    checking: false,
+    camera: "ok",
+    cameraReady: true,
+    brightness: 120,
+    lowLight: false,
+    recheck: vi.fn(),
+  }),
 }));
 
 import StudySession from "./StudySession";

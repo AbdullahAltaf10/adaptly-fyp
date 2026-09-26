@@ -53,6 +53,35 @@ vi.mock("../intervention/useIntervention", () => ({
   }),
 }));
 
+// `useContent` sits on top of `../api/client`, which pulls in Firebase auth --
+// not available in this test environment, and not what this file is testing.
+// Default to "no document" so the existing fallback-context tests keep their
+// original meaning; the real-chunk-text test below overrides this per-case.
+let mockContent = { content: null, loading: false, error: null };
+vi.mock("../content/useContent", () => ({
+  useContent: () => mockContent,
+}));
+
+// Scope 6.2's pre-session camera check is not what this file tests, and a
+// real getUserMedia probe never resolves "ready" in jsdom, which would
+// leave "Start session" permanently disabled here.
+vi.mock("../engagement/usePreSessionCheck", () => ({
+  CAMERA_UNKNOWN: "unknown",
+  CAMERA_OK: "ok",
+  CAMERA_DENIED: "denied",
+  CAMERA_MISSING: "missing",
+  CAMERA_FAILED: "failed",
+  usePreSessionCheck: () => ({
+    videoRef: { current: null },
+    checking: false,
+    camera: "ok",
+    cameraReady: true,
+    brightness: 120,
+    lowLight: false,
+    recheck: vi.fn(),
+  }),
+}));
+
 const capturedProps = [];
 vi.mock("../features/ai-assistant/AssistantPanel", () => ({
   AssistantPanel: (props) => {
@@ -61,6 +90,7 @@ vi.mock("../features/ai-assistant/AssistantPanel", () => ({
   },
 }));
 
+import { fallbackStudyContext } from "../features/ai-assistant/demoStudyContext";
 import StudySession from "./StudySession";
 
 function startSession() {
@@ -70,6 +100,7 @@ function startSession() {
 describe("StudySession — assistant panel", () => {
   beforeEach(() => {
     capturedProps.length = 0;
+    mockContent = { content: null, loading: false, error: null };
   });
 
   it("does not offer the assistant before a session has started", () => {
@@ -101,17 +132,57 @@ describe("StudySession — assistant panel", () => {
     expect(context.current_chunk.chunk_id).toBe("chunk-7");
   });
 
-  it("falls back to placeholder context fields the study screen has no real data for", () => {
+  it("falls back to placeholder context fields when no document is loaded", () => {
     render(<StudySession contentId="content-42" chunkId="chunk-7" />);
     startSession();
     fireEvent.click(screen.getByRole("button", { name: /ask the assistant/i }));
 
     const context = capturedProps.at(-1).studyContext;
-    // No content-viewer text/metadata exists on this screen yet -- these
-    // must still be present (from the fallback shape), not undefined,
-    // so AssistantPanel never receives a malformed context object.
+    // No document is loaded in this case -- these must still be present
+    // (from the fallback shape), not undefined, so AssistantPanel never
+    // receives a malformed context object.
     expect(context.current_chunk.text).toEqual(expect.any(String));
     expect(context.content_context).toBeDefined();
+  });
+
+  it("passes the real chunk text and content metadata from ContentViewer's document, not the fallback placeholder", () => {
+    mockContent = {
+      loading: false,
+      error: null,
+      content: {
+        content_id: "content-42",
+        title: "Gradient Descent, Explained",
+        content_type: "pdf",
+        language: "en",
+        chunks: [
+          {
+            chunk_id: "chunk-7",
+            order: 1,
+            section_title: "Step Sizes",
+            text: "A learning rate that is too large can overshoot the minimum.",
+          },
+        ],
+      },
+    };
+
+    render(<StudySession contentId="content-42" chunkId="chunk-7" />);
+    startSession();
+    fireEvent.click(screen.getByRole("button", { name: /ask the assistant/i }));
+
+    const context = capturedProps.at(-1).studyContext;
+    expect(context.current_chunk.chunk_id).toBe("chunk-7");
+    expect(context.current_chunk.text).toBe(
+      "A learning rate that is too large can overshoot the minimum."
+    );
+    expect(context.current_chunk.section_title).toBe("Step Sizes");
+    expect(context.current_chunk.text).not.toBe(fallbackStudyContext.current_chunk.text);
+
+    expect(context.content_context).toEqual({
+      title: "Gradient Descent, Explained",
+      content_type: "pdf",
+      language: "en",
+    });
+    expect(context.content_context).not.toEqual(fallbackStudyContext.content_context);
   });
 
   it("keeps the rest of the study screen intact if mounting/toggling the assistant is exercised repeatedly", () => {
