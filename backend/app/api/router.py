@@ -36,6 +36,7 @@ from app.engagement.routes import router as engagement_router
 from app.intervention.routes import router as intervention_router
 from app.users.routes import router as users_router
 from backend.app.analytics.api.routes import router as analytics_router
+from backend.app.compliance.api.routes import router as compliance_router
 
 api_router = APIRouter()
 
@@ -56,3 +57,6 @@ api_router.include_router(assistant_router)
 
 # Module 8 - Session Analytics & Insight Reporting
 api_router.include_router(analytics_router)
+
+# Module 10 - Compliance Attestation Engine
+api_router.include_router(compliance_router)

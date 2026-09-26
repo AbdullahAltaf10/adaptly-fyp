@@ -15,17 +15,21 @@ import { useState } from "react";
 import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 import { useAuth } from "./auth/AuthContext";
 import { auth, googleProvider } from "./auth/firebase";
+import ComplianceReportPage from "./pages/ComplianceReportPage";
+import HrComplianceReportsPage from "./pages/HrComplianceReportsPage";
 import StudySession from "./pages/StudySession";
 
-// Module 8 (Issue #81): reachable, not really routed -- this file has no
-// router and isn't the place to add one unilaterally (see its own comment
-// below); a plain view toggle is the smallest change that makes the
-// dashboard actually reachable instead of introducing routing
-// infrastructure Module 1's real frontend migration should decide, not
-// this placeholder. `react-router-dom` is already a dependency but unused
-// anywhere in the app -- worth a look if a real router is wanted instead.
+// Module 8 (Issue #81) and Module 10 (Issue #81) each added a view toggle on
+// separate branches (PR #86 for the analytics dashboard, this stack for the
+// compliance report views) -- this file still has no router, and introducing
+// one isn't either issue's call to make unilaterally, so both toggles are
+// reconciled here into one plain multi-way view switch. `react-router-dom`
+// is already a dependency but unused anywhere in the app -- worth a look if
+// a real router is wanted instead.
 const VIEW_STUDY_SESSION = "study_session";
 const VIEW_ANALYTICS_DASHBOARD = "analytics_dashboard";
+const VIEW_COMPLIANCE_REPORT = "compliance_report";
+const VIEW_HR_COMPLIANCE_REPORTS = "hr_compliance_reports";
 
 export default function App() {
   const { currentUser, profile, profileError, refreshProfile } = useAuth();
@@ -97,19 +101,21 @@ export default function App() {
         }}
       >
         <nav style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <h1 style={{ fontSize: "1.3rem", margin: 0 }}>
-            {view === VIEW_STUDY_SESSION ? "Study session" : "Analytics dashboard"}
-          </h1>
-          <button
-            onClick={() =>
-              setView((current) =>
-                current === VIEW_STUDY_SESSION ? VIEW_ANALYTICS_DASHBOARD : VIEW_STUDY_SESSION
-              )
-            }
-            style={{ marginLeft: "1rem" }}
-          >
-            {view === VIEW_STUDY_SESSION ? "View analytics dashboard" : "Back to study session"}
+          <h1 style={{ fontSize: "1.3rem", margin: 0 }}>Adaptly</h1>
+          <button onClick={() => setView(VIEW_STUDY_SESSION)} style={{ marginLeft: "1rem" }}>
+            Study session
           </button>
+          <button onClick={() => setView(VIEW_ANALYTICS_DASHBOARD)}>
+            Analytics dashboard
+          </button>
+          <button onClick={() => setView(VIEW_COMPLIANCE_REPORT)}>
+            Compliance report
+          </button>
+          {profile?.corporate_role === "hr_admin" && (
+            <button onClick={() => setView(VIEW_HR_COMPLIANCE_REPORTS)}>
+              HR: compliance reports
+            </button>
+          )}
         </nav>
         <span style={{ fontSize: "0.85rem", color: "#666" }}>
           {profile?.name || currentUser.email}
@@ -119,19 +125,26 @@ export default function App() {
         </span>
       </header>
 
-      {view === VIEW_STUDY_SESSION ? (
+      {view === VIEW_STUDY_SESSION && (
         <StudySession
           highContrast={profile?.accessibility_settings?.contrast === "high"}
         />
-      ) : (
-        // No completed-session id is threaded up from StudySession to App
-        // yet (a separate, larger change), so this shows representative
-        // mock data rather than nothing -- the same mock default
-        // AnalyticsDashboard already falls back to when no real fetcher is
-        // given. Wiring the real just-finished session's id through is
-        // follow-up work.
+      )}
+      {/* No completed-session id is threaded up from StudySession to App yet
+          (a separate, larger change), so this shows representative mock
+          data rather than nothing -- the same mock default AnalyticsDashboard
+          already falls back to when no real fetcher is given. Wiring the
+          real just-finished session's id through is follow-up work. */}
+      {view === VIEW_ANALYTICS_DASHBOARD && (
         <AnalyticsDashboard session={{ sessionId: "demo-session", status: "completed" }} />
       )}
+      {/* Unlike the analytics dashboard above, ComplianceReportPage no
+          longer needs a session id handed to it -- it discovers the
+          learner's most recently completed session itself (Issue #80 Part
+          B, via Module 8's session-history endpoint) and shows a friendly
+          empty state if there isn't one yet. */}
+      {view === VIEW_COMPLIANCE_REPORT && <ComplianceReportPage />}
+      {view === VIEW_HR_COMPLIANCE_REPORTS && <HrComplianceReportsPage />}
     </main>
   );
 }
