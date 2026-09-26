@@ -57,7 +57,10 @@ in that schema:
 
 `insight_report.status` mirrors `analytics-report.schema.json`'s status enum
 (`pending | generated | fallback_generated | failed`). `report_text` is
-always `null` today — Issue #32 is what will ever populate it.
+`null` until a report has actually been generated (Issue #32) via `POST
+.../insight-report/retry` — this endpoint stays passive and never triggers
+generation itself, it only reads back whatever the retry endpoint already
+produced and saved.
 
 **Errors:**
 
@@ -177,26 +180,42 @@ prefers a real stored profile over the placeholder whenever one exists.
 
 ### `POST /api/sessions/{session_id}/insight-report/retry`
 
-Stub. Real Gemini insight-report generation is Issue #32's scope; this
-endpoint exists so the API shape is stable ahead of that, and **never**
-recomputes or re-saves the session summary.
+The **only** trigger for Gemini/fallback insight-report generation anywhere
+in Module 8 (Issue #32) — `GET .../analytics` above stays passive and never
+calls this itself. **Never** recomputes or re-saves the numeric session
+summary; only the separate insight-report document and the summary's
+`insight_report_status` envelope field are touched.
+
+Fires generation when the current status is `pending` (the first-ever
+attempt) or `failed` (an actual retry). If the current status is already
+`generated` or `fallback_generated`, this is a no-op — Gemini's free tier
+(20 requests/day/model) is never re-spent on a report that already exists.
+
+On any Gemini failure at all (missing `GEMINI_API_KEY`, timeout, service
+error, or a response that fails validation), a deterministic fallback report
+is generated instead — the learner always gets a `200` with a real report
+either way; Gemini being unavailable is not itself an error response.
 
 **Path parameters:** `session_id` (string, required)
 
-**Response `200`:**
+**Response `200`** (first attempt or retry that actually ran generation):
 
 ```json
 {
   "session_id": "session-1",
-  "insight_report_status": "pending",
-  "retried": false,
-  "message": "Insight report generation is not implemented yet (see Issue #32). The numeric analytics summary is unaffected and was not recomputed."
+  "insight_report_status": "generated",
+  "retried": true,
+  "message": "A written summary was generated for this session."
 }
 ```
 
+`insight_report_status` is `"fallback_generated"` (with a message noting
+Gemini was unavailable) when the deterministic fallback was used instead.
+
 If a report already exists (`generated` or `fallback_generated`), the same
-shape is returned with a message noting there's nothing to retry, and
-`insight_report_status` reflecting the existing value.
+shape is returned with `"retried": false` and a message noting there's
+nothing to retry, and `insight_report_status` reflecting the existing value
+— Gemini is not called in this case.
 
 **Errors:**
 

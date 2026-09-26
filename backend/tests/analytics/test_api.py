@@ -12,14 +12,22 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import mongomock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app.analytics.api.deps import get_repositories
-from backend.app.analytics.api.routes import router
+from backend.app.analytics.api.routes import (
+    MAX_INSIGHT_RETRY_ATTEMPTS,
+    get_gemini_caller,
+    router,
+)
+from backend.app.analytics.insights.gemini_client import (
+    GeminiConfigurationError,
+    GeminiUnavailableError,
+)
 from backend.app.analytics.service.finalization import (
     AnalyticsRepositories,
     finalize_session,
@@ -27,6 +35,45 @@ from backend.app.analytics.service.finalization import (
 from backend.app.api.deps import get_current_user_id
 from backend.tests.analytics.fixtures import fixture, timestamp
 from backend.tests.analytics.test_metrics import assert_schema_match
+
+VALID_GEMINI_TEXT = (
+    "You stayed focused for most of this session, with one short dip that "
+    "you recovered from after a suggested break. A summary was also offered "
+    "partway through, which seemed to help you settle back into the "
+    "material. Your longest focused stretch was well over ten minutes, "
+    "which is a strong sign of steady attention throughout the reading. "
+    "There wasn't much difficulty overall, but if you'd like to reinforce "
+    "anything, it may help to revisit the section right after the short "
+    "dip in focus, since that is where the break was suggested. Keep up "
+    "the steady pace, and remember the assistant is available anytime you "
+    "want a quick check on your understanding before moving on to the next "
+    "part of the material."
+)
+
+
+def _no_gemini_configured(prompt: str) -> str:
+    """Default test double: simulates "no API key configured".
+
+    Every test in this file goes through this unless it explicitly injects
+    its own ``call_gemini`` — no test ever performs a real network call to
+    Gemini, matching the free-tier-quota and network-isolation requirements.
+
+    Raises ``GeminiConfigurationError`` — the same subclass the real
+    ``gemini_client.call_gemini`` raises for a missing key — so tests that
+    exercise the default double get the same "retrying will not help"
+    ``error_code`` a real missing key would produce.
+    """
+
+    raise GeminiConfigurationError("GEMINI_API_KEY is not configured.")
+
+
+def _gemini_unavailable(prompt: str) -> str:
+    """Test double simulating a *transient* Gemini failure (e.g. a 503 that
+    outlasted ``call_gemini``'s own in-process retry) rather than a missing
+    key — this is the case the ``/retry`` route should allow a bounded
+    number of retries for."""
+
+    raise GeminiUnavailableError("Gemini was still unavailable after retrying.")
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -41,12 +88,18 @@ def _repositories() -> AnalyticsRepositories:
     return AnalyticsRepositories.from_database(database)
 
 
-def _build_app(repositories: AnalyticsRepositories, user_id: str | None = "user-1") -> FastAPI:
+def _build_app(
+    repositories: AnalyticsRepositories,
+    user_id: str | None = "user-1",
+    *,
+    call_gemini: Callable[[str], str] = _no_gemini_configured,
+) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_repositories] = lambda: repositories
     if user_id is not None:
         app.dependency_overrides[get_current_user_id] = lambda: user_id
+    app.dependency_overrides[get_gemini_caller] = lambda: call_gemini
     return app
 
 
@@ -335,21 +388,178 @@ class LearningProfileEndpointTests(unittest.TestCase):
 
 
 class InsightReportRetryEndpointTests(unittest.TestCase):
-    def test_retry_does_not_recompute_or_duplicate_the_summary(self) -> None:
+    """Real Issue #32 generation behavior.
+
+    These replace the old stub-behavior tests (retry on "pending" used to be
+    a documented no-op) now that #32 implements real generation — the retry
+    endpoint is the ONLY trigger for it, so every test here goes through
+    ``POST .../retry``, never anything that could call Gemini for real.
+    """
+
+    def test_first_attempt_from_pending_calls_gemini_and_stores_a_generated_report(
+        self,
+    ) -> None:
         repositories = _repositories()
         _seed_and_finalize(repositories)
-        before = repositories.session_analytics.get("session-1", "1.0")
-        client = TestClient(_build_app(repositories))
+        client = TestClient(
+            _build_app(repositories, call_gemini=lambda prompt: VALID_GEMINI_TEXT)
+        )
 
         response = client.post("/api/sessions/session-1/insight-report/retry")
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertEqual(body["insight_report_status"], "pending")
-        self.assertFalse(body["retried"])
+        self.assertEqual(body["insight_report_status"], "generated")
+        self.assertTrue(body["retried"])
+
+        stored_report = repositories.insight_reports.get("session-1")
+        self.assertEqual(stored_report["status"], "generated")
+        self.assertEqual(stored_report["generation_method"], "gemini")
+        self.assertEqual(stored_report["report_text"], VALID_GEMINI_TEXT)
+        self.assertEqual(stored_report["retry_count"], 0)
+
+        summary_document = repositories.session_analytics.get("session-1", "1.0")
+        self.assertEqual(summary_document["insight_report_status"], "generated")
+
+    def test_gemini_unavailable_falls_back_and_is_still_a_200(self) -> None:
+        repositories = _repositories()
+        _seed_and_finalize(repositories)
+        client = TestClient(_build_app(repositories))  # default: no API key configured
+
+        response = client.post("/api/sessions/session-1/insight-report/retry")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["insight_report_status"], "fallback_generated")
+        self.assertTrue(body["retried"])
+
+        stored_report = repositories.insight_reports.get("session-1")
+        self.assertEqual(stored_report["generation_method"], "deterministic_fallback")
+        self.assertTrue(stored_report["fallback_used"])
+        self.assertIsNotNone(stored_report["report_text"])
+
+    def test_retry_never_recomputes_or_duplicates_the_numeric_summary(self) -> None:
+        repositories = _repositories()
+        _seed_and_finalize(repositories)
+        before = repositories.session_analytics.get("session-1", "1.0")
+        client = TestClient(_build_app(repositories))
+
+        client.post("/api/sessions/session-1/insight-report/retry")
+
         after = repositories.session_analytics.get("session-1", "1.0")
-        self.assertEqual(before, after)
+        self.assertEqual(before["summary"], after["summary"])
         self.assertEqual(len(repositories.session_analytics.list_by_session("session-1")), 1)
+
+    def test_a_transient_failure_recovers_on_retry_once_gemini_is_healthy(
+        self,
+    ) -> None:
+        """The scenario a single transient Gemini failure must not
+        permanently lock out: attempt 1 gets a 503-shaped failure (a
+        ``fallback_generated`` report with error_code
+        ``GeminiUnavailableError``), the learner calls ``/retry``, and
+        attempt 2 succeeds once Gemini is healthy again — the report
+        becomes ``generated``, not stuck on the fallback forever.
+        """
+        repositories = _repositories()
+        _seed_and_finalize(repositories)
+        client = TestClient(_build_app(repositories, call_gemini=_gemini_unavailable))
+
+        first_response = client.post("/api/sessions/session-1/insight-report/retry")
+        first_body = first_response.json()
+        self.assertEqual(first_body["insight_report_status"], "fallback_generated")
+        self.assertTrue(first_body["retried"])
+
+        first_report = repositories.insight_reports.get("session-1")
+        self.assertEqual(first_report["retry_count"], 0)
+        self.assertEqual(first_report["error_code"], "GeminiUnavailableError")
+
+        # Gemini recovers: swap in a healthy call_gemini for the retry.
+        healthy_app = _build_app(
+            repositories, call_gemini=lambda prompt: VALID_GEMINI_TEXT
+        )
+        healthy_client = TestClient(healthy_app)
+
+        second_response = healthy_client.post(
+            "/api/sessions/session-1/insight-report/retry"
+        )
+        second_body = second_response.json()
+
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(second_body["insight_report_status"], "generated")
+        self.assertTrue(second_body["retried"])
+
+        second_report = repositories.insight_reports.get("session-1")
+        self.assertEqual(second_report["status"], "generated")
+        self.assertEqual(second_report["retry_count"], 1)
+        self.assertEqual(second_report["report_id"], first_report["report_id"])
+
+    def test_retry_is_refused_when_the_fallback_was_caused_by_no_api_key(
+        self,
+    ) -> None:
+        """A ``fallback_generated`` report whose ``error_code`` indicates no
+        API key was configured is not offered a retry: nothing about
+        retrying the same request without a key changes the outcome."""
+        repositories = _repositories()
+        _seed_and_finalize(repositories)
+        client = TestClient(_build_app(repositories))  # default: no API key configured
+
+        client.post("/api/sessions/session-1/insight-report/retry")
+        before = repositories.insight_reports.get("session-1")
+        self.assertEqual(before["error_code"], "GeminiConfigurationError")
+
+        response = client.post("/api/sessions/session-1/insight-report/retry")
+        body = response.json()
+
+        self.assertEqual(body["insight_report_status"], "fallback_generated")
+        self.assertFalse(body["retried"])
+        self.assertNotIn("already exists", body["message"])
+
+        after = repositories.insight_reports.get("session-1")
+        self.assertEqual(after["retry_count"], before["retry_count"])
+
+    def test_retry_is_refused_once_the_retry_bound_is_exceeded(self) -> None:
+        """A report can only be retried ``MAX_INSIGHT_RETRY_ATTEMPTS`` times
+        even when every failure is genuinely transient — this protects the
+        free-tier Gemini quota from an endless retry loop."""
+        repositories = _repositories()
+        _seed_and_finalize(repositories)
+        client = TestClient(_build_app(repositories, call_gemini=_gemini_unavailable))
+
+        for _ in range(MAX_INSIGHT_RETRY_ATTEMPTS + 1):
+            client.post("/api/sessions/session-1/insight-report/retry")
+
+        stored = repositories.insight_reports.get("session-1")
+        self.assertEqual(stored["retry_count"], MAX_INSIGHT_RETRY_ATTEMPTS)
+
+        response = client.post("/api/sessions/session-1/insight-report/retry")
+        body = response.json()
+
+        self.assertFalse(body["retried"])
+        self.assertIn("maximum", body["message"].lower())
+
+        after = repositories.insight_reports.get("session-1")
+        self.assertEqual(after["retry_count"], MAX_INSIGHT_RETRY_ATTEMPTS)
+
+    def test_retry_does_not_call_gemini_or_change_anything_once_generated(self) -> None:
+        repositories = _repositories()
+        _seed_and_finalize(repositories)
+        calls: list[str] = []
+
+        def spy(prompt: str) -> str:
+            calls.append(prompt)
+            return VALID_GEMINI_TEXT
+
+        client = TestClient(_build_app(repositories, call_gemini=spy))
+        client.post("/api/sessions/session-1/insight-report/retry")
+        self.assertEqual(len(calls), 1)
+
+        response = client.post("/api/sessions/session-1/insight-report/retry")
+
+        body = response.json()
+        self.assertEqual(body["insight_report_status"], "generated")
+        self.assertFalse(body["retried"])
+        self.assertIn("already exists", body["message"])
+        self.assertEqual(len(calls), 1)  # Gemini was not called a second time.
 
     def test_retry_on_incomplete_session_is_409(self) -> None:
         repositories = _repositories()
@@ -381,6 +591,53 @@ class InsightReportRetryEndpointTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["insight_report_status"], "generated")
         self.assertIn("already exists", body["message"])
+
+    def test_generated_report_is_shaped_per_the_shared_contract(self) -> None:
+        repositories = _repositories()
+        _seed_and_finalize(repositories)
+        client = TestClient(
+            _build_app(repositories, call_gemini=lambda prompt: VALID_GEMINI_TEXT)
+        )
+
+        client.post("/api/sessions/session-1/insight-report/retry")
+
+        stored_report = repositories.insight_reports.get("session-1")
+        assert_schema_match(stored_report, _schema("analytics-report.schema.json"))
+
+
+class InsightReportRetrievalIntegrationTests(unittest.TestCase):
+    """GET .../analytics stays passive; it only ever reads what retry already wrote."""
+
+    def test_get_never_triggers_generation(self) -> None:
+        repositories = _repositories()
+        _seed_and_finalize(repositories)
+        calls: list[str] = []
+
+        def spy(prompt: str) -> str:
+            calls.append(prompt)
+            return VALID_GEMINI_TEXT
+
+        client = TestClient(_build_app(repositories, call_gemini=spy))
+
+        client.get("/api/sessions/session-1/analytics")
+        client.get("/api/sessions/session-1/analytics")
+
+        self.assertEqual(calls, [])
+
+    def test_get_reflects_a_generated_report_after_retry_produced_one(self) -> None:
+        repositories = _repositories()
+        _seed_and_finalize(repositories)
+        client = TestClient(
+            _build_app(repositories, call_gemini=lambda prompt: VALID_GEMINI_TEXT)
+        )
+
+        client.post("/api/sessions/session-1/insight-report/retry")
+        response = client.get("/api/sessions/session-1/analytics")
+
+        body = response.json()
+        self.assertEqual(
+            body["insight_report"], {"status": "generated", "report_text": VALID_GEMINI_TEXT}
+        )
 
 
 class ResponseContractCompatibilityTests(unittest.TestCase):
