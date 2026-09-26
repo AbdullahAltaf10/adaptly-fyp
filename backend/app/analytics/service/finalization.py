@@ -199,7 +199,7 @@ def finalize_session(
                 reason="Session end time precedes its start time.",
             )
         # No pause-interval field exists in the session contract (documented,
-        # intentionally-unresolved gap — see CLAUDE.md 6.6 / the session
+        # intentionally-unresolved gap — see PROJECT_CONTEXT.md 6.6 / the session
         # schema). Wall-clock start-to-end is therefore the authoritative
         # duration, and any paused time is included in it. This is a known
         # limitation, not something to silently invent a fix for here.

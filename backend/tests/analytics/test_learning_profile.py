@@ -381,7 +381,7 @@ class InterventionEffectivenessAggregationTests(unittest.TestCase):
         self.assertEqual(break_suggestion["ineffective_count"], 1)
         self.assertEqual(break_suggestion["unknown_outcome_count"], 1)
         # 2 effective / (2 effective + 1 ineffective) = 2/3, NOT 2/4 -- the
-        # unknown outcome must be excluded from the denominator (CLAUDE.md
+        # unknown outcome must be excluded from the denominator (PROJECT_CONTEXT.md
         # 6.5 rule #3).
         self.assertAlmostEqual(break_suggestion["effectiveness_rate"], 2 / 3, places=5)
 
@@ -431,7 +431,7 @@ class InterventionEffectivenessAggregationTests(unittest.TestCase):
 
 
 class EffectiveSupportMethodsTests(unittest.TestCase):
-    """CLAUDE.md 6.6 gap #4: the evidence threshold decided in this issue."""
+    """PROJECT_CONTEXT.md 6.6 gap #4: the evidence threshold decided in this issue."""
 
     def _profile_with_break_suggestion(self, effective: int, ineffective: int) -> dict:
         summaries = [
@@ -770,7 +770,7 @@ class DataQualityFlagsTests(unittest.TestCase):
         self.assertIn("inconsistent_metric_versions", profile["data_quality"]["flags"])
         # The profile's OWN metric_version is the current engine version --
         # separate from the versions its inputs happened to be computed
-        # under (CLAUDE.md 6.5 rule #4).
+        # under (PROJECT_CONTEXT.md 6.5 rule #4).
         self.assertEqual(profile["metric_version"], "1.0")
 
     def test_sparse_engagement_propagates_when_a_majority_of_sessions_flagged_it(self) -> None:

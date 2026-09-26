@@ -2,7 +2,7 @@
  * Contract-valid mock analytics data for the Module 8 dashboard (Issue #30).
  *
  * Every `summary` object below matches shared/contracts/session-summary.schema.json
- * exactly (same required fields, same null-vs-zero rules — see CLAUDE.md 6.5:
+ * exactly (same required fields, same null-vs-zero rules — see PROJECT_CONTEXT.md 6.5:
  * "unknown is not zero"). `overview` and `insightReport` are the two small
  * additions the real backend API is expected to layer on top of that
  * contract for display purposes, matching the precedent already set by the

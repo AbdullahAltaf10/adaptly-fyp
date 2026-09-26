@@ -48,16 +48,16 @@ and an "average recovery-duration trend" as if those were separate profile
 fields. The actual shared contract
 (`shared/contracts/learning-profile.schema.json`, `additionalProperties:
 false`) has no such fields — only one `focus_trend` and one `recovery_trend`
-enum (`improving | stable | declining | insufficient_data`). Per CLAUDE.md
+enum (`improving | stable | declining | insufficient_data`). Per PROJECT_CONTEXT.md
 6.3 ("existing contracts are authoritative... contract changes only happen
 through an explicit, deliberate issue"), this implementation computes
 exactly what the schema defines. `focus_trend` is derived from the
 focused-percentage series across sessions; `recovery_trend` from the
 recovery-rate series. No new fields were added to the contract.
 
-## The decision CLAUDE.md flagged as still open: the evidence threshold
+## The decision PROJECT_CONTEXT.md flagged as still open: the evidence threshold
 
-CLAUDE.md section 6.6 explicitly called out that
+PROJECT_CONTEXT.md section 6.6 explicitly called out that
 `effective_support_methods`'s minimum-evidence threshold "has intentionally
 not been finalized — must be defined via config/metric-version/tests, not
 invented silently." This issue makes that decision:
@@ -107,9 +107,9 @@ un-gated `intervention_effectiveness_by_type` list.
   `metric_version` each input session happened to be computed under. If
   those differ across a learner's history, `inconsistent_metric_versions`
   is flagged rather than silently mixing incompatible calculation rules
-  (CLAUDE.md 6.5 rule #4).
+  (PROJECT_CONTEXT.md 6.5 rule #4).
 
-## Small-sample caution (CLAUDE.md 6.5, rule #7)
+## Small-sample caution (PROJECT_CONTEXT.md 6.5, rule #7)
 
 Every trend calculation checks `minimum_sessions_for_trend` (default 3)
 *qualifying* data points before ever returning `"improving"` or
@@ -181,7 +181,7 @@ Result: **161 passed** (119 pre-existing + 42 new).
   is the raw `chunk_id`. Attaching a real section title requires content
   metadata Module 8 doesn't own (Module 2's job).
 - **No correlation ID between assistant messages**, same open gap already
-  documented for the single-session engine (CLAUDE.md 6.6) — assistant
+  documented for the single-session engine (PROJECT_CONTEXT.md 6.6) — assistant
   usage here is aggregated as independent counts, not paired
   question/answer exchanges.
 - **Flag propagation uses a simple majority threshold (50%)**, not a
