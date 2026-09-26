@@ -725,7 +725,7 @@ def stubbed_window(monkeypatch, fake_store):
     )
     monkeypatch.setattr(
         engagement_routes, "predict",
-        lambda sequence: {"state": "struggling", "confidence": 0.71},
+        lambda sequence, **kwargs: {"state": "struggling", "confidence": 0.71},
     )
     monkeypatch.setattr(engagement_routes.head_pose, "mean_pose", lambda raw: None)
 
@@ -857,7 +857,7 @@ def test_a_window_with_no_difficulty_offers_nothing(monkeypatch, stubbed_window)
     _furrowed(monkeypatch, False)
     monkeypatch.setattr(
         engagement_routes, "predict",
-        lambda sequence: {"state": "focused", "confidence": 0.9},
+        lambda sequence, **kwargs: {"state": "focused", "confidence": 0.9},
     )
     engagement_routes.session_state.start("u1", "s1")
 
@@ -970,3 +970,83 @@ def test_ending_the_session_through_the_endpoint_clears_the_quiet_period(
 
     client.post("/engagement/session/end", json={"session_id": "s1"})
     assert cooldown.is_cooling("u1", "s1") is False
+
+
+# --------------------------------------------------------------------------
+# Which model a learner actually gets (Module 3, calibrated artifacts)
+# --------------------------------------------------------------------------
+#
+# The calibrated model was trained on per-subject-centred features. Handing it
+# raw ones is not a degraded version of the same thing - measured on the DAiSEE
+# test split it flags 35.7% of windows at a precision lift of 0.99x, which is
+# no better than flagging at random and worse than what ships today. So the
+# choice of artifacts has to follow whether the features were actually
+# centred, and these two tests pin that to the calibration record rather than
+# to a global switch somebody can flip by accident.
+
+def _capture_predict_call(monkeypatch, calibration_doc):
+    """Run one analyze request and return the kwargs `predict` was called with."""
+    captured = {}
+
+    monkeypatch.setattr(
+        engagement_routes, "extract_feature_sequence", lambda frames: [[0.0] * 9] * 10
+    )
+    monkeypatch.setattr(engagement_routes.head_pose, "mean_pose", lambda raw: None)
+
+    def fake_predict(sequence, **kwargs):
+        captured.update(kwargs)
+        return {"state": "focused", "confidence": 0.9}
+
+    monkeypatch.setattr(engagement_routes, "predict", fake_predict)
+    monkeypatch.setattr(
+        engagement_routes, "apply_calibration", lambda sequence, offset: sequence
+    )
+
+    class Calibration:
+        def find_one(self, query):
+            return calibration_doc
+
+    class DB:
+        calibration = Calibration()
+
+    monkeypatch.setattr(engagement_routes, "db", DB())
+
+    app.dependency_overrides[get_current_user] = lambda: {
+        "uid": "u-cal", "email": "u-cal@t.com"
+    }
+    client.post(
+        "/engagement/analyze",
+        json={"frames": [{"landmarks": None} for _ in range(10)], "session_id": "s1"},
+    )
+    return captured
+
+
+def test_a_learner_who_has_not_calibrated_keeps_the_model_that_shipped(monkeypatch, fake_store):
+    """No calibration record must mean no behaviour change at all.
+
+    This is the case that would regress silently: the calibrated pair fed raw
+    features still returns plausible states, so nothing would look broken
+    while every flag became worthless.
+    """
+    kwargs = _capture_predict_call(monkeypatch, calibration_doc=None)
+
+    assert kwargs.get("calibrated") is False
+    assert kwargs.get("struggling_threshold") is None
+
+
+def test_a_calibrated_learner_gets_the_calibrated_model_and_its_threshold(monkeypatch, fake_store):
+    """The gain is the pair, not either half.
+
+    At plain argmax the calibrated model is *worse* than the shipped one
+    (recall 0.064 against 0.099); it only wins with the threshold tuned for
+    it. So the threshold must travel with the artifacts, never separately.
+    """
+    from ml.inference.model import CALIBRATED_STRUGGLING_THRESHOLD
+
+    kwargs = _capture_predict_call(
+        monkeypatch,
+        calibration_doc={"offset": [0.0] * 9, "pose_baseline": None, "brow_baseline": None},
+    )
+
+    assert kwargs.get("calibrated") is True
+    assert kwargs.get("struggling_threshold") == CALIBRATED_STRUGGLING_THRESHOLD

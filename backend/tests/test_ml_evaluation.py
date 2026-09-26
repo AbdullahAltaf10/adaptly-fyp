@@ -133,7 +133,7 @@ def _probabilities(monkeypatch, values):
         def transform(self, array):
             return array
 
-    monkeypatch.setattr(ml_model, "load_model", lambda: (FakeModel(), FakeScaler()))
+    monkeypatch.setattr(ml_model, "load_model", lambda **kwargs: (FakeModel(), FakeScaler()))
     return ml_model
 
 
