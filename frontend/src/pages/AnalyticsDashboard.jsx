@@ -35,7 +35,12 @@ import SessionOverview from "../analytics/SessionOverview";
 import SummaryCard from "../analytics/SummaryCard";
 import { useSessionAnalytics } from "../analytics/useSessionAnalytics";
 
-export default function AnalyticsDashboard({ session, fetchAnalytics, onRetryInsightReport }) {
+export default function AnalyticsDashboard({
+  session,
+  fetchAnalytics,
+  onRetryInsightReport,
+  generateInsightReport,
+}) {
   const isCompleted = session?.status === "completed";
 
   // Critical guard: only a completed session's analytics are ever fetched or
@@ -114,7 +119,12 @@ export default function AnalyticsDashboard({ session, fetchAnalytics, onRetryIns
             interventions={data.interventions}
             sessionStartIso={computeSessionStartIso(data.summary)}
           />
-          <InsightReport insightReport={data.insightReport} onRetry={onRetryInsightReport} />
+          <InsightReport
+            insightReport={data.insightReport}
+            onRetry={onRetryInsightReport}
+            generate={generateInsightReport}
+            sessionId={session?.sessionId}
+          />
         </>
       )}
     </main>

@@ -27,6 +27,7 @@ vi.mock("../auth/firebase", () => ({ auth: {}, googleProvider: {} }));
 vi.mock("../analytics/api", () => ({
   fetchMostRecentCompletedSession: () => Promise.resolve(null),
   fetchSessionAnalytics: () => Promise.resolve({}),
+  requestInsightReport: () => Promise.resolve({ retried: false }),
 }));
 
 import AppShell from "./AppShell";
