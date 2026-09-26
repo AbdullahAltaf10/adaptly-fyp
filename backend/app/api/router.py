@@ -35,7 +35,7 @@ from app.content.routes import router as content_router
 from app.engagement.routes import router as engagement_router
 from app.intervention.routes import router as intervention_router
 from app.users.routes import router as users_router
-from backend.app.analytics.api.routes import router as analytics_router
+from app.analytics.api.routes import router as analytics_router
 
 api_router = APIRouter()
 

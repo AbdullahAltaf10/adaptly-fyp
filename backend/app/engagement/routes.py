@@ -28,7 +28,7 @@ from app.engagement.analytics_sink import record_engagement_event
 from app.engagement.calibration import apply_calibration, compute_offset, compute_user_baseline
 from ml.inference.model import CALIBRATED_STRUGGLING_THRESHOLD
 from app.intervention import service as intervention
-from backend.app.analytics.service import session_lifecycle
+from app.analytics.service import session_lifecycle
 from ml.inference import head_pose
 from ml.inference.features import InvalidLandmarksError, extract_features
 from ml.inference.model import predict
