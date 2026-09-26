@@ -11,8 +11,10 @@
  * learner-facing release.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { AssistantPanel } from "../features/ai-assistant/AssistantPanel";
+import { fallbackStudyContext } from "../features/ai-assistant/demoStudyContext";
 import { useEngagementCapture } from "../engagement/useEngagementCapture";
 import { useFacePresence } from "../engagement/useFacePresence";
 import InterventionHost from "../intervention/InterventionHost";
@@ -34,6 +36,7 @@ function describeState(state) {
 
 export default function StudySession({ contentId, chunkId, highContrast = false }) {
   const [started, setStarted] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   // Nothing registers a chunk until a content viewer exists (issue #12), so
   // `seconds()` returns 0 and the dwell-gated interventions stay out of reach.
@@ -64,6 +67,29 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
   const diagnostics = prediction?.diagnostics ?? null;
   const display = describeState(prediction?.state);
   const deepThinking = diagnostics?.deep_thinking?.deep_thinking;
+
+  // Module 5. Only session_id/content_id/chunk_id are real, live values --
+  // this screen has no chunk text or content metadata to give the assistant
+  // yet (that lives with Module 2's content viewer, not here), so the rest
+  // of fallbackStudyContext's shape is kept as-is rather than fabricated.
+  // A known limitation, not silently pretended away.
+  const studyContext = useMemo(
+    () => ({
+      ...fallbackStudyContext,
+      session_id: capture.sessionId ?? fallbackStudyContext.session_id,
+      content_id: contentId ?? fallbackStudyContext.content_id,
+      current_chunk: {
+        ...fallbackStudyContext.current_chunk,
+        chunk_id: chunkId ?? fallbackStudyContext.current_chunk.chunk_id,
+      },
+      session_context: {
+        ...fallbackStudyContext.session_context,
+        status: started ? "active" : fallbackStudyContext.session_context.status,
+        current_chunk_id: chunkId ?? fallbackStudyContext.session_context.current_chunk_id,
+      },
+    }),
+    [capture.sessionId, contentId, chunkId, started]
+  );
 
   const panelStyle = {
     maxWidth: "520px",
@@ -410,6 +436,35 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
           </>
         )}
       </div>
+
+      {/* Module 5. Fixed-position and collapsed by default so it never moves
+          or resizes anything above - the engagement/intervention layout is
+          untouched either way. Only offered once a session is running,
+          since studyContext.session_id only means anything at that point. */}
+      {started && (
+        <div style={{ position: "fixed", bottom: "1rem", right: "1rem", zIndex: 800 }}>
+          <button type="button" onClick={() => setAssistantOpen((open) => !open)}>
+            {assistantOpen ? "Close assistant" : "Ask the assistant"}
+          </button>
+          {assistantOpen && (
+            <div
+              style={{
+                marginTop: "0.5rem",
+                width: "min(90vw, 360px)",
+                maxHeight: "70vh",
+                overflowY: "auto",
+                borderRadius: "8px",
+                border: `1px solid ${highContrast ? "#fff" : "#ccc"}`,
+                backgroundColor: highContrast ? "#000" : "#fff",
+                color: highContrast ? "#fff" : "#000",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
+              }}
+            >
+              <AssistantPanel studyContext={studyContext} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
