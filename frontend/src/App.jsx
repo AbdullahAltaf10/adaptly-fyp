@@ -12,13 +12,25 @@
 import { signInWithPopup, signOut } from "firebase/auth";
 import { useState } from "react";
 
+import AnalyticsDashboard from "./pages/AnalyticsDashboard";
 import { useAuth } from "./auth/AuthContext";
 import { auth, googleProvider } from "./auth/firebase";
 import StudySession from "./pages/StudySession";
 
+// Module 8 (Issue #81): reachable, not really routed -- this file has no
+// router and isn't the place to add one unilaterally (see its own comment
+// below); a plain view toggle is the smallest change that makes the
+// dashboard actually reachable instead of introducing routing
+// infrastructure Module 1's real frontend migration should decide, not
+// this placeholder. `react-router-dom` is already a dependency but unused
+// anywhere in the app -- worth a look if a real router is wanted instead.
+const VIEW_STUDY_SESSION = "study_session";
+const VIEW_ANALYTICS_DASHBOARD = "analytics_dashboard";
+
 export default function App() {
   const { currentUser, profile, profileError, refreshProfile } = useAuth();
   const [signInError, setSignInError] = useState(null);
+  const [view, setView] = useState(VIEW_STUDY_SESSION);
 
   const handleSignIn = async () => {
     setSignInError(null);
@@ -84,7 +96,21 @@ export default function App() {
           marginBottom: "1rem",
         }}
       >
-        <h1 style={{ fontSize: "1.3rem", margin: 0 }}>Study session</h1>
+        <nav style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <h1 style={{ fontSize: "1.3rem", margin: 0 }}>
+            {view === VIEW_STUDY_SESSION ? "Study session" : "Analytics dashboard"}
+          </h1>
+          <button
+            onClick={() =>
+              setView((current) =>
+                current === VIEW_STUDY_SESSION ? VIEW_ANALYTICS_DASHBOARD : VIEW_STUDY_SESSION
+              )
+            }
+            style={{ marginLeft: "1rem" }}
+          >
+            {view === VIEW_STUDY_SESSION ? "View analytics dashboard" : "Back to study session"}
+          </button>
+        </nav>
         <span style={{ fontSize: "0.85rem", color: "#666" }}>
           {profile?.name || currentUser.email}
           <button onClick={() => signOut(auth)} style={{ marginLeft: "0.75rem" }}>
@@ -93,9 +119,19 @@ export default function App() {
         </span>
       </header>
 
-      <StudySession
-        highContrast={profile?.accessibility_settings?.contrast === "high"}
-      />
+      {view === VIEW_STUDY_SESSION ? (
+        <StudySession
+          highContrast={profile?.accessibility_settings?.contrast === "high"}
+        />
+      ) : (
+        // No completed-session id is threaded up from StudySession to App
+        // yet (a separate, larger change), so this shows representative
+        // mock data rather than nothing -- the same mock default
+        // AnalyticsDashboard already falls back to when no real fetcher is
+        // given. Wiring the real just-finished session's id through is
+        // follow-up work.
+        <AnalyticsDashboard session={{ sessionId: "demo-session", status: "completed" }} />
+      )}
     </main>
   );
 }
