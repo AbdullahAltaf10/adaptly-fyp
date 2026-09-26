@@ -181,13 +181,16 @@ def create_gemini_response(
     request: AssistantMessageRequest,
     settings: AssistantSettings,
     client_factory: GeminiClientFactory = create_gemini_client,
+    engagement_state: str | None = None,
 ) -> AssistantMessageResponse:
     """Send a separated learning prompt to Gemini and return its answer."""
     if not settings.gemini_api_key:
         raise AssistantConfigurationError("Gemini is not configured for this server.")
 
     emotion_signal = classify_conversational_signal(request.question)
-    context = build_assistant_context(request, emotion_signal=emotion_signal)
+    context = build_assistant_context(
+        request, emotion_signal=emotion_signal, engagement_state=engagement_state
+    )
     prompt = build_assistant_prompt(context)
     try:
         client = client_factory(settings.gemini_api_key, settings.gemini_timeout_ms)
@@ -212,6 +215,7 @@ def create_assistant_response(
     request: AssistantMessageRequest,
     settings: AssistantSettings | None = None,
     client_factory: GeminiClientFactory | None = None,
+    engagement_state: str | None = None,
 ) -> tuple[AssistantMessageResponse, str | None]:
     """Select local mock or real Gemini mode using centralized settings.
 
@@ -231,5 +235,6 @@ def create_assistant_response(
         request,
         resolved_settings,
         client_factory or create_gemini_client,
+        engagement_state=engagement_state,
     )
     return response, resolved_settings.gemini_model

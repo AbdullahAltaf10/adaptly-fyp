@@ -52,6 +52,7 @@ def select_conversation_history(
 def build_assistant_context(
     request: AssistantMessageRequest,
     emotion_signal: EmotionSignal = "neutral",
+    engagement_state: str | None = None,
 ) -> AssistantContext:
     """Normalize available request data into one prompt-ready context object."""
     content_metadata = request.content_context
@@ -80,4 +81,5 @@ def build_assistant_context(
         ),
         conversation=select_conversation_history(request.previous_messages),
         emotion_signal=emotion_signal,
+        engagement_state=engagement_state,
     )

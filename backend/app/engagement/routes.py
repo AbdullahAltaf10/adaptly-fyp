@@ -19,6 +19,7 @@ from app.engagement import (
     deep_thinking,
     fatigue,
     furrow,
+    latest_state,
     recovery,
     rereading,
     session as session_state,
@@ -116,6 +117,7 @@ def end_session(payload: SessionRequest, user=Depends(get_current_user)):
     # here rather than inside session.py so the engagement rules stay a closed
     # set that knows nothing about interventions.
     intervention.on_session_end(user["uid"], payload.session_id)
+    latest_state.clear(user["uid"], payload.session_id)
     result = session_state.end(user["uid"], payload.session_id)
     # Module 8's own finalization (Issue #82). Failure-safe: never raises,
     # so a database or analytics problem cannot prevent a session from
@@ -293,6 +295,8 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
         )
 
         record_engagement_event(event)
+        # Module 5 reads this so the assistant knows how the session is going.
+        latest_state.record(uid, session_id, state)
 
         # Module 4. Wrapped because engagement detection works today and this
         # is new: a fault in the intervention path must not take the analyze
