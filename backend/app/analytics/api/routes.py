@@ -28,6 +28,24 @@ from backend.app.api.deps import get_current_user_id
 
 router = APIRouter(tags=["module-8-analytics"])
 
+# Bounds how many times a learner can ask ``/insight-report/retry`` to try
+# Gemini again after a "fallback_generated" report, protecting the free-tier
+# quota from being spent retrying something that keeps failing. Distinct
+# from gemini_client.MAX_ATTEMPTS: that constant bounds retries *inside* one
+# call_gemini invocation (a single retry click may itself involve up to 3
+# Gemini calls); this one bounds how many separate retry clicks are honored
+# for the same session's report.
+MAX_INSIGHT_RETRY_ATTEMPTS = 3
+
+# error_code values for which a later retry might actually succeed: Gemini
+# was transiently unavailable (timeout, network error, empty response, or a
+# 5xx/429 that outlasted call_gemini's own in-process retries). Anything not
+# in this set — GeminiConfigurationError (no API key, no package, a
+# non-transient 4xx), a validation rejection, or any other error — means
+# retrying the same request would not change the outcome, so it stays
+# refused. See backend/app/analytics/insights/gemini_client.py.
+_RETRYABLE_ERROR_CODES = frozenset({"GeminiUnavailableError"})
+
 
 def get_gemini_caller() -> GeminiCaller:
     """FastAPI dependency for the Gemini call function.
@@ -215,17 +233,24 @@ def retry_insight_report(
     deterministic fallback. Never recomputes or re-saves the numeric session
     summary — only the separate insight-report document and the summary's
     ``insight_report_status`` envelope field are touched. A report that
-    already reached ``"generated"`` or ``"fallback_generated"`` is left
-    untouched and reported back as-is, matching the once-per-status-
-    transition contract (free-tier Gemini quota is not re-spent on a report
-    that already exists).
+    already reached ``"generated"`` is left untouched and reported back
+    as-is (nothing to retry — Gemini already succeeded). A
+    ``"fallback_generated"`` report is also left untouched *unless* its
+    stored ``error_code`` indicates Gemini was only transiently unavailable
+    and its ``retry_count`` is still within ``MAX_INSIGHT_RETRY_ATTEMPTS`` —
+    see the constants above. This keeps the free-tier Gemini quota from
+    being re-spent on a report that either already succeeded or can never
+    succeed (no API key configured), while still letting a learner recover
+    from a genuinely transient failure (a timeout, a 503, a 429) instead of
+    being stuck with a fallback report forever.
     """
 
     session = _get_owned_session(repositories, session_id, user_id)
     summary_document = _require_completed_summary(repositories, session)
     current_status = summary_document["insight_report_status"]
+    existing_report = repositories.insight_reports.get(session_id)
 
-    if current_status in ("generated", "fallback_generated"):
+    if current_status == "generated":
         return {
             "session_id": session_id,
             "insight_report_status": current_status,
@@ -233,7 +258,34 @@ def retry_insight_report(
             "message": "An insight report already exists for this session; nothing to retry.",
         }
 
-    existing_report = repositories.insight_reports.get(session_id)
+    if current_status == "fallback_generated":
+        error_code = existing_report["error_code"] if existing_report else None
+        retries_used = existing_report["retry_count"] if existing_report else 0
+
+        if error_code not in _RETRYABLE_ERROR_CODES:
+            return {
+                "session_id": session_id,
+                "insight_report_status": current_status,
+                "retried": False,
+                "message": (
+                    "Gemini is not configured, so retrying would not "
+                    "change the outcome. The summary generated from your "
+                    "session numbers is final."
+                ),
+            }
+
+        if retries_used >= MAX_INSIGHT_RETRY_ATTEMPTS:
+            return {
+                "session_id": session_id,
+                "insight_report_status": current_status,
+                "retried": False,
+                "message": (
+                    "This report has already been retried the maximum "
+                    f"number of times ({MAX_INSIGHT_RETRY_ATTEMPTS}). The "
+                    "summary generated from your session numbers is final."
+                ),
+            }
+
     retry_count = existing_report["retry_count"] + 1 if existing_report else 0
 
     report = generate_insight_report(

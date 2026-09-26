@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import types as pytypes
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from backend.app.analytics.insights.fallback import build_fallback_report
 from backend.app.analytics.insights.generator import generate_insight_report
@@ -297,10 +300,10 @@ class GenerateInsightReportTests(unittest.TestCase):
         self.assertTrue(report["fallback_used"])
 
     def test_missing_api_key_falls_back(self) -> None:
-        from backend.app.analytics.insights.gemini_client import GeminiUnavailableError
+        from backend.app.analytics.insights.gemini_client import GeminiConfigurationError
 
         def no_key(prompt: str) -> str:
-            raise GeminiUnavailableError("GEMINI_API_KEY is not configured.")
+            raise GeminiConfigurationError("GEMINI_API_KEY is not configured.")
 
         report = generate_insight_report(
             _summary(),
@@ -310,7 +313,7 @@ class GenerateInsightReportTests(unittest.TestCase):
         )
 
         self.assertEqual(report["status"], "fallback_generated")
-        self.assertEqual(report["error_code"], "GeminiUnavailableError")
+        self.assertEqual(report["error_code"], "GeminiConfigurationError")
 
     def test_sparse_analytics_input_still_produces_a_safe_fallback(self) -> None:
         summary = _summary(
@@ -478,6 +481,127 @@ class GeminiClientConfigTests(unittest.TestCase):
         config = load_gemini_config()
 
         self.assertIsNone(config.api_key)
+
+
+class GeminiClientRetryTests(unittest.TestCase):
+    """Covers ``call_gemini``'s own in-process retry (the review's Part 2),
+    modeled exactly on ``app/intervention/provider.py``'s ``GeminiGenerator``
+    retry: ``MAX_ATTEMPTS = 3``, ``BACKOFF_SECONDS = (1.0, 3.0)``, retry on
+    5xx/429, fail fast on any other 4xx. Installs a fake ``google.genai``
+    module into ``sys.modules`` for the duration of each test — the same
+    technique ``backend/tests/test_intervention_content.py`` uses for
+    Module 4's equivalent retry — so no real network call or dependency on
+    SDK internals beyond the documented error/code shape is needed.
+    """
+
+    def setUp(self) -> None:
+        self._saved_modules = {
+            name: sys.modules.get(name)
+            for name in ("google", "google.genai", "google.genai.errors", "google.genai.types")
+        }
+        from backend.app.analytics.insights import gemini_client
+
+        self._gemini_client = gemini_client
+        self._sleep_patch = mock.patch.object(gemini_client.time, "sleep", lambda seconds: None)
+        self._sleep_patch.start()
+
+    def tearDown(self) -> None:
+        self._sleep_patch.stop()
+        for name, module in self._saved_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+    def _install_fake_sdk(
+        self, failures: int, *, error_class: str = "ServerError", code: int = 503
+    ) -> dict[str, int]:
+        calls = {"n": 0}
+
+        class APIError(Exception):
+            pass
+
+        class ServerError(APIError):
+            pass
+
+        class ClientError(APIError):
+            pass
+
+        raised = {"ServerError": ServerError, "ClientError": ClientError}[error_class]
+
+        class Models:
+            def generate_content(self, *, model, contents, config):
+                calls["n"] += 1
+                if calls["n"] <= failures:
+                    error = raised("overloaded")
+                    error.code = code
+                    raise error
+                return pytypes.SimpleNamespace(text="A written summary of your session.")
+
+        class Client:
+            def __init__(self, **kwargs: Any) -> None:
+                self.models = Models()
+
+        genai = pytypes.ModuleType("google.genai")
+        genai.Client = Client
+        errors = pytypes.ModuleType("google.genai.errors")
+        errors.APIError, errors.ServerError, errors.ClientError = APIError, ServerError, ClientError
+        sdk_types = pytypes.ModuleType("google.genai.types")
+        sdk_types.HttpOptions = lambda **kwargs: kwargs
+        sdk_types.GenerateContentConfig = lambda **kwargs: kwargs
+        genai.errors, genai.types = errors, sdk_types
+        google = pytypes.ModuleType("google")
+        google.genai = genai
+
+        for name, module in (
+            ("google", google),
+            ("google.genai", genai),
+            ("google.genai.errors", errors),
+            ("google.genai.types", sdk_types),
+        ):
+            sys.modules[name] = module
+
+        return calls
+
+    def _config(self) -> Any:
+        return self._gemini_client.GeminiConfig(
+            api_key="test-key", model_name="gemini-test", timeout_seconds=5.0
+        )
+
+    def test_a_transient_5xx_is_retried_and_succeeds_within_one_call(self) -> None:
+        calls = self._install_fake_sdk(failures=2, error_class="ServerError", code=503)
+
+        text = self._gemini_client.call_gemini("prompt", config=self._config())
+
+        self.assertEqual(text, "A written summary of your session.")
+        self.assertEqual(calls["n"], 3)
+
+    def test_a_429_is_retried_and_succeeds_within_one_call(self) -> None:
+        calls = self._install_fake_sdk(failures=2, error_class="ClientError", code=429)
+
+        text = self._gemini_client.call_gemini("prompt", config=self._config())
+
+        self.assertEqual(text, "A written summary of your session.")
+        self.assertEqual(calls["n"], 3)
+
+    def test_it_gives_up_after_max_attempts_and_raises_the_retryable_error(self) -> None:
+        calls = self._install_fake_sdk(failures=99, error_class="ServerError", code=503)
+
+        with self.assertRaises(self._gemini_client.GeminiUnavailableError):
+            self._gemini_client.call_gemini("prompt", config=self._config())
+        self.assertEqual(calls["n"], self._gemini_client.MAX_ATTEMPTS)
+
+    def test_a_non_transient_4xx_fails_fast_without_retrying(self) -> None:
+        """A bad key or a bad model name is a configuration problem, not a
+        transient one — retrying only makes it slower to diagnose, and the
+        error is raised as GeminiConfigurationError so the /retry route
+        knows not to offer a retry for it either."""
+
+        calls = self._install_fake_sdk(failures=99, error_class="ClientError", code=401)
+
+        with self.assertRaises(self._gemini_client.GeminiConfigurationError):
+            self._gemini_client.call_gemini("prompt", config=self._config())
+        self.assertEqual(calls["n"], 1)
 
 
 if __name__ == "__main__":

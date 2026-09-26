@@ -39,12 +39,13 @@ def generate_insight_report(
     """Generate (first attempt) or regenerate (a retry) one session's report.
 
     ``retry_count`` is supplied by the caller (the API layer knows whether
-    this is the very first attempt or an actual retry from ``"failed"``) so
-    this function stays a pure calculation with no persistence lookups of its
-    own. The only way this returns ``status: "failed"`` is if building the
-    deterministic fallback itself raises — which should never happen for a
-    contract-valid summary, but is handled explicitly rather than left to
-    crash the retry endpoint.
+    this is the very first attempt, or an actual retry the
+    ``/insight-report/retry`` route decided to allow — see that route's
+    ``error_code``/``retry_count`` bound) so this function stays a pure
+    calculation with no persistence lookups of its own. The only way this
+    returns ``status: "failed"`` is if building the deterministic fallback
+    itself raises — which should never happen for a contract-valid summary,
+    but is handled explicitly rather than left to crash the retry endpoint.
     """
 
     now_str = format_timestamp(now or utc_now())
