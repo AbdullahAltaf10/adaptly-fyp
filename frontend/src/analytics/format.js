@@ -3,7 +3,7 @@
  *
  * Every function here follows one rule: a missing value (`null`/`undefined`)
  * always renders as the text "Not available" — never as 0, 0%, or a blank
- * string. Per Module 8's contracts (see CLAUDE.md 6.5), `null` means "this
+ * string. Per Module 8's contracts (see PROJECT_CONTEXT.md 6.5), `null` means "this
  * genuinely could not be measured", which is a different fact from a real
  * zero, and showing the two the same way would mislead a learner about
  * their own session.

@@ -1,5 +1,5 @@
 # Adaptly — Autonomous Neurodiversity-Aware Learning Coach for Online Education
-### FYP Project Context for Claude Code
+### Project Context for AI-Assisted Development
 
 > Read this file fully before doing any work in this repo.
 > **Rule #1: This file gives you architecture, contracts, and history. It does NOT give you
@@ -24,7 +24,7 @@ heatmaps).
 **Team:**
 - Syed Sibtain Haider — 231589 — CV/ML pipeline & training, coordination
 - M. Hassan Jamshaid — 231574 — has completed his 3 modules independently, currently integrating them into this shared repo
-- **Abdullah Altaf — 231625 — this is me, the person Claude Code is assisting**
+- **Abdullah Altaf — 231625 — this is me, the person working with an AI coding assistant on this repo**
 
 ---
 
@@ -415,7 +415,7 @@ For each issue:
 
 ---
 
-## 9. What I need Claude Code to do right now
+## 9. What the Assistant Should Do Right Now
 
 Focus exclusively on **Module 8**. Immediate first step: verify the true current state of
 **Issue #26** (branch `feature/26-module-8-metric-engine` — is it committed, pushed, PR'd,
