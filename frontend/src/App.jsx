@@ -14,11 +14,25 @@ import { useState } from "react";
 
 import { useAuth } from "./auth/AuthContext";
 import { auth, googleProvider } from "./auth/firebase";
+import ComplianceReportPage from "./pages/ComplianceReportPage";
+import HrComplianceReportsPage from "./pages/HrComplianceReportsPage";
 import StudySession from "./pages/StudySession";
+
+// Module 10 (Issue #81): reachable, not really routed -- same reasoning as
+// Module 8's own dashboard toggle (see PR #86, which adds an equivalent
+// button for AnalyticsDashboard on a separate branch): this file has no
+// router, and introducing one isn't this issue's call to make unilaterally.
+// Whoever merges #86 and this one together will need to reconcile two
+// independent view-toggle additions into one navigation -- expected, not a
+// bug in either PR.
+const VIEW_STUDY_SESSION = "study_session";
+const VIEW_COMPLIANCE_REPORT = "compliance_report";
+const VIEW_HR_COMPLIANCE_REPORTS = "hr_compliance_reports";
 
 export default function App() {
   const { currentUser, profile, profileError, refreshProfile } = useAuth();
   const [signInError, setSignInError] = useState(null);
+  const [view, setView] = useState(VIEW_STUDY_SESSION);
 
   const handleSignIn = async () => {
     setSignInError(null);
@@ -84,7 +98,20 @@ export default function App() {
           marginBottom: "1rem",
         }}
       >
-        <h1 style={{ fontSize: "1.3rem", margin: 0 }}>Study session</h1>
+        <nav style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <h1 style={{ fontSize: "1.3rem", margin: 0 }}>Adaptly</h1>
+          <button onClick={() => setView(VIEW_STUDY_SESSION)} style={{ marginLeft: "1rem" }}>
+            Study session
+          </button>
+          <button onClick={() => setView(VIEW_COMPLIANCE_REPORT)}>
+            Compliance report
+          </button>
+          {profile?.corporate_role === "hr_admin" && (
+            <button onClick={() => setView(VIEW_HR_COMPLIANCE_REPORTS)}>
+              HR: compliance reports
+            </button>
+          )}
+        </nav>
         <span style={{ fontSize: "0.85rem", color: "#666" }}>
           {profile?.name || currentUser.email}
           <button onClick={() => signOut(auth)} style={{ marginLeft: "0.75rem" }}>
@@ -93,9 +120,19 @@ export default function App() {
         </span>
       </header>
 
-      <StudySession
-        highContrast={profile?.accessibility_settings?.contrast === "high"}
-      />
+      {view === VIEW_STUDY_SESSION && (
+        <StudySession
+          highContrast={profile?.accessibility_settings?.contrast === "high"}
+        />
+      )}
+      {/* No completed-session id is threaded up from StudySession to App
+          yet (same known limitation PR #86 documents for Module 8's
+          dashboard) -- ComplianceReportPage's default mock fetcher renders
+          representative data instead of nothing. */}
+      {view === VIEW_COMPLIANCE_REPORT && (
+        <ComplianceReportPage sessionId="demo-session" />
+      )}
+      {view === VIEW_HR_COMPLIANCE_REPORTS && <HrComplianceReportsPage />}
     </main>
   );
 }
