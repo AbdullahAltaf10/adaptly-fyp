@@ -20,6 +20,7 @@ import { useContent } from "../content/useContent";
 import PreSessionCheck from "../engagement/PreSessionCheck";
 import { useEngagementCapture } from "../engagement/useEngagementCapture";
 import { useFacePresence } from "../engagement/useFacePresence";
+import { useCalibrationStatus } from "../engagement/useCalibrationStatus";
 import { usePreSessionCheck } from "../engagement/usePreSessionCheck";
 import InterventionHost from "../intervention/InterventionHost";
 import { useDwell } from "../intervention/useDwell";
@@ -62,6 +63,7 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
   // Scope 6.2's pre-session check. Runs only while the dialog is up, and
   // releases its probe stream before the session's own camera is requested.
   const preSession = usePreSessionCheck({ enabled: !started });
+  const calibratedBefore = useCalibrationStatus({ enabled: !started });
 
   // `ContentViewer` calls `dwell.register(chunk_id, element)` for every chunk
   // it renders (issue #47), so the most-visible chunk and how long it has been
@@ -201,6 +203,7 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
         <PreSessionCheck
           check={preSession}
           warnings={document_.content?.warnings ?? []}
+          calibrated={calibratedBefore}
           document={contentId ? { loading: document_.loading, error: document_.error } : undefined}
           onStart={() => setStarted(true)}
           panelStyle={panelStyle}

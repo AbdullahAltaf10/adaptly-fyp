@@ -169,3 +169,34 @@ describe("the document this session is about", () => {
     expect(startButton().disabled).toBe(true);
   });
 });
+
+describe("calibration advice", () => {
+  it("says so when the learner is calibrated", () => {
+    setup({}, { calibrated: true });
+    expect(screen.getByText(/calibrated to you/i)).toBeTruthy();
+  });
+
+  it("advises calibrating when they have not, and does not block", () => {
+    // Calibration decides which model serves them, so it is worth a sentence -
+    // but someone who has not calibrated can still study.
+    setup({}, { calibrated: false });
+    expect(screen.getByText(/not calibrated yet/i)).toBeTruthy();
+    expect(screen.getByText(/remembered for next time/i)).toBeTruthy();
+    expect(startButton().disabled).toBe(false);
+  });
+
+  it("says nothing when it could not find out", () => {
+    // Unknown must not read as "not calibrated".
+    setup({}, { calibrated: null });
+    expect(screen.queryByText(/not calibrated yet/i)).toBeNull();
+    expect(screen.queryByText(/calibrated to you/i)).toBeNull();
+  });
+
+  it("does not mention calibration when there is no working camera", () => {
+    setup(
+      { camera: CAMERA_DENIED, cameraReady: false, brightness: null, lowLight: null },
+      { calibrated: false }
+    );
+    expect(screen.queryByText(/not calibrated yet/i)).toBeNull();
+  });
+});
