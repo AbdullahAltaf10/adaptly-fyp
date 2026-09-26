@@ -24,7 +24,7 @@ applicable," never silently scored as zero.
 |---|---|---|---|
 | 72 | Module 10 compliance report contract and Engagement Quality Score engine | ✅ Done | [issue-72-score-engine.md](issue-72-score-engine.md) |
 | 73 | Module 10 critical-section attestation evidence | ✅ Done | [issue-73-critical-evidence.md](issue-73-critical-evidence.md) |
-| 74 | Module 10 compliance report storage and API | ⬜ Not started | — |
+| 74 | Module 10 compliance report storage and API | ✅ Done | [issue-74-report-api.md](issue-74-report-api.md) |
 | 75 | Module 10 attestation report views (frontend) | ⬜ Not started | — |
 | 76 | Generate the compliance report automatically at session end (blocked) | ⬜ Blocked — issue only, not implemented | — |
 
