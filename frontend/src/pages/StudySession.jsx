@@ -15,8 +15,10 @@ import { useState } from "react";
 
 import ContentViewer from "../content/ContentViewer";
 import { useContent } from "../content/useContent";
+import PreSessionCheck from "../engagement/PreSessionCheck";
 import { useEngagementCapture } from "../engagement/useEngagementCapture";
 import { useFacePresence } from "../engagement/useFacePresence";
+import { usePreSessionCheck } from "../engagement/usePreSessionCheck";
 import InterventionHost from "../intervention/InterventionHost";
 import { useDwell } from "../intervention/useDwell";
 import { useIntervention } from "../intervention/useIntervention";
@@ -38,6 +40,10 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
   const [started, setStarted] = useState(false);
 
   const document_ = useContent(contentId);
+
+  // Scope 6.2's pre-session check. Runs only while the dialog is up, and
+  // releases its probe stream before the session's own camera is requested.
+  const preSession = usePreSessionCheck({ enabled: !started });
 
   // `ContentViewer` calls `dwell.register(chunk_id, element)` for every chunk
   // it renders (issue #47), so the most-visible chunk and how long it has been
@@ -127,55 +133,16 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
         @keyframes adaptly-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
       `}</style>
 
-      {/* The camera is not requested until this has been dismissed. */}
+      {/* The session's own camera is not requested until this is dismissed.
+          The check below opens a short-lived probe stream of its own and stops
+          it again, so the two never share a stream. */}
       {!started && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="session-instructions-title"
-          style={{
-            position: "fixed",
-            inset: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: "rgba(0,0,0,0.55)",
-            zIndex: 1000,
-          }}
-        >
-          <div style={panelStyle}>
-            <h3 id="session-instructions-title" style={{ marginTop: 0 }}>
-              Before you start
-            </h3>
-            <p style={{ marginTop: 0 }}>
-              Your camera is used to measure engagement.{" "}
-              <strong>No video is recorded, stored, or sent anywhere</strong> —
-              only numeric facial measurements leave your browser.
-            </p>
-            <ol style={{ paddingLeft: "1.2rem", lineHeight: 1.7 }}>
-              <li>
-                Sit about an arm&apos;s length away, with your whole face
-                visible and roughly centred.
-              </li>
-              <li>
-                Make sure your face is well lit. Avoid sitting with a bright
-                window directly behind you.
-              </li>
-              <li>
-                Once the camera is active, choose <strong>Calibrate Now</strong>{" "}
-                and look naturally at the screen for about three seconds.
-              </li>
-              <li>
-                <strong>Recalibrate if a different person takes over</strong>, or
-                if you move your laptop or change seat — the baseline is per
-                person and per camera angle.
-              </li>
-            </ol>
-            <button onClick={() => setStarted(true)} style={{ marginTop: "0.5rem" }}>
-              Start session
-            </button>
-          </div>
-        </div>
+        <PreSessionCheck
+          check={preSession}
+          warnings={document_.content?.warnings ?? []}
+          onStart={() => setStarted(true)}
+          panelStyle={panelStyle}
+        />
       )}
 
       {/* Dim everything behind the enlarged view so the instruction is
