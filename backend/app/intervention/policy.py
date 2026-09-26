@@ -54,7 +54,11 @@ from app.intervention.decider import (
     Signals,
 )
 
-POLICY_VERSION = "v1-tiered"
+# v2: a learner's own history can now steer away from a response that has not
+# helped them (preferences.py). It can only make support gentler, never pushier.
+# Bumped because the same signals can now yield a different decision, and
+# Module 8 records this on every event.
+POLICY_VERSION = "v2-tiered-personalised"
 
 # Dwell thresholds, in seconds on the current chunk.
 #
@@ -105,6 +109,20 @@ class DefaultPolicy:
         factor = self.critical_factor if signals.is_critical else 1.0
         return self.dwell_long * factor, self.dwell_short * factor
 
+    @staticmethod
+    def _because_of_history(signals: Signals, kind: str, eligible: bool, gate: float) -> str:
+        """A sentence saying a response was withheld because it has not helped.
+
+        Only when that is what actually happened: the type was discouraged AND
+        the evidence and dwell would otherwise have earned it. Otherwise the
+        learner's history had nothing to do with the decision, and saying it did
+        would put a false explanation in Module 8's log.
+        """
+        if kind in signals.discouraged_types and eligible and signals.dwell_seconds >= gate:
+            label = "simplified text" if kind == SIMPLIFY_CONTENT else "a summary"
+            return f" Offered something gentler because {label} has not helped you before."
+        return ""
+
     def decide(self, signals: Signals, *, history=None, recovery=None) -> Decision | None:
         history = history or []
 
@@ -144,7 +162,11 @@ class DefaultPolicy:
 
         # Rewriting what somebody is reading is the most intrusive thing this
         # system does, so it needs the strongest evidence AND sustained dwell.
-        if strong and signals.dwell_seconds >= long_gate:
+        if (
+            strong
+            and signals.dwell_seconds >= long_gate
+            and SIMPLIFY_CONTENT not in signals.discouraged_types
+        ):
             return Decision(
                 intervention_type=SIMPLIFY_CONTENT,
                 reason_code=REASON_STRUGGLING,
@@ -162,13 +184,14 @@ class DefaultPolicy:
         # A summary changes nothing the learner is reading, so weaker evidence
         # is acceptable - but it still only makes sense once they have been on
         # the section long enough for there to be something to summarise.
-        if signals.dwell_seconds >= short_gate:
+        if signals.dwell_seconds >= short_gate and BULLET_SUMMARY not in signals.discouraged_types:
             return Decision(
                 intervention_type=BULLET_SUMMARY,
                 reason_code=REASON_STRUGGLING,
                 reason=(
                     f"Signs of difficulty on this section after "
                     f"{int(signals.dwell_seconds)}s."
+                    + self._because_of_history(signals, SIMPLIFY_CONTENT, strong, long_gate)
                 ),
                 tier=TIER_BROAD,
                 chunk_id=signals.chunk_id,
@@ -180,7 +203,10 @@ class DefaultPolicy:
         return Decision(
             intervention_type=ASSISTANT_HELP_PROMPT,
             reason_code=REASON_STRUGGLING,
-            reason="Signs of difficulty; offered the assistant.",
+            reason=(
+                "Signs of difficulty; offered the assistant."
+                + self._because_of_history(signals, BULLET_SUMMARY, True, short_gate)
+            ),
             tier=TIER_BROAD,
             chunk_id=signals.chunk_id,
             content_id=signals.content_id,
