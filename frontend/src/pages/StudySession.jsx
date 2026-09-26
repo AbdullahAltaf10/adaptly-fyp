@@ -36,8 +36,23 @@ function describeState(state) {
   return STATE_DISPLAY[state] ?? { label: state ?? "Unknown", color: "inherit" };
 }
 
-export default function StudySession({ contentId, chunkId, highContrast = false }) {
+/**
+ * High contrast follows the document, not a prop.
+ *
+ * It used to be passed down from `App`, which read the wrong profile key
+ * (`contrast` rather than `high_contrast`), so it was permanently false. Now
+ * `useAccessibility` sets `data-contrast` on <html> and this reads it, which
+ * means the setting reaches this screen without anything having to remember to
+ * thread it through. The prop is kept as an override for tests.
+ */
+function documentPrefersHighContrast() {
+  if (typeof document === "undefined") return false;
+  return document.documentElement.getAttribute("data-contrast") === "high";
+}
+
+export default function StudySession({ contentId, chunkId, highContrast }) {
   const [started, setStarted] = useState(false);
+  const useHighContrast = highContrast ?? documentPrefersHighContrast();
 
   const document_ = useContent(contentId);
 
@@ -88,9 +103,9 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
     overflowY: "auto",
     padding: "1.5rem",
     borderRadius: "8px",
-    backgroundColor: highContrast ? "#000" : "#fff",
-    color: highContrast ? "#fff" : "#000",
-    border: `1px solid ${highContrast ? "#fff" : "#ccc"}`,
+    backgroundColor: useHighContrast ? "#000" : "#fff",
+    color: useHighContrast ? "#fff" : "#000",
+    border: `1px solid ${useHighContrast ? "#fff" : "#ccc"}`,
     boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
   };
 
@@ -253,9 +268,9 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
               marginBottom: "0.75rem",
               borderRadius: "8px",
               fontSize: "0.9rem",
-              border: `1px solid ${highContrast ? "#fff" : "#f0c36d"}`,
-              backgroundColor: highContrast ? "#000" : "#fdf6e3",
-              color: highContrast ? "#fff" : "#000",
+              border: `1px solid ${useHighContrast ? "#fff" : "#f0c36d"}`,
+              backgroundColor: useHighContrast ? "#000" : "#fdf6e3",
+              color: useHighContrast ? "#fff" : "#000",
             }}
           >
             <span>
