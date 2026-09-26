@@ -14,6 +14,7 @@ MAX_MESSAGE_LENGTH = 4_000
 MAX_SUGGESTED_QUESTION_LENGTH = 300
 SUGGESTED_QUESTION_COUNT = 3
 EmotionSignal = Literal["neutral", "confusion", "frustration"]
+InputMode = Literal["typed", "voice", "suggested_question"]
 
 
 class AssistantModel(BaseModel):
@@ -111,6 +112,11 @@ class AssistantMessageRequest(AssistantModel):
     previous_messages: Annotated[
         list[ConversationMessage], Field(default_factory=list, max_length=MAX_PREVIOUS_MESSAGES)
     ]
+    # Defaults to "typed" until the frontend sends a real value (tracking
+    # whether a question came from typing, voice input, or a suggested
+    # question - see Issue #34's analytics_contracts.py). Optional so this
+    # isn't a breaking change to existing callers.
+    input_mode: InputMode = "typed"
 
     @field_validator("question", "session_id", "content_id", mode="before")
     @classmethod

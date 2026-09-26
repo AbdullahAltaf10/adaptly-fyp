@@ -2,6 +2,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+// See AssistantPanel.test.jsx for why: assistantApi.js now goes through the
+// shared axios client, which initializes Firebase auth on import. Every test
+// here injects its own apiClient prop, so mock the module out before import.
+vi.mock("../../api/client", () => ({
+  default: { post: vi.fn() },
+}));
+
 import { AssistantPanel } from "./AssistantPanel";
 
 const contextA = {
@@ -60,6 +67,7 @@ describe("AssistantPanel API integration", () => {
       ...contextA,
       question: "Explain gradient descent.",
       previous_messages: [],
+      input_mode: "typed",
     });
     expect(screen.getByRole("button", { name: "Give a gradient descent example?" })).toBeInTheDocument();
 
