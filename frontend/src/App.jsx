@@ -12,7 +12,7 @@
 import { signInWithPopup, signOut } from "firebase/auth";
 import { useState } from "react";
 
-import AnalyticsDashboard from "./pages/AnalyticsDashboard";
+import AnalyticsDashboardContainer from "./pages/AnalyticsDashboardContainer";
 import { useAuth } from "./auth/AuthContext";
 import { auth, googleProvider } from "./auth/firebase";
 import StudySession from "./pages/StudySession";
@@ -124,13 +124,12 @@ export default function App() {
           highContrast={profile?.accessibility_settings?.contrast === "high"}
         />
       ) : (
-        // No completed-session id is threaded up from StudySession to App
-        // yet (a separate, larger change), so this shows representative
-        // mock data rather than nothing -- the same mock default
-        // AnalyticsDashboard already falls back to when no real fetcher is
-        // given. Wiring the real just-finished session's id through is
-        // follow-up work.
-        <AnalyticsDashboard session={{ sessionId: "demo-session", status: "completed" }} />
+        // Loads the learner's real most recent completed session from the
+        // backend and renders AnalyticsDashboard with it (falling back to a
+        // calm empty state if they haven't completed one yet) -- see
+        // AnalyticsDashboardContainer for why this is its own component
+        // rather than inlined here.
+        <AnalyticsDashboardContainer />
       )}
     </main>
   );
