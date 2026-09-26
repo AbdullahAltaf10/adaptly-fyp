@@ -39,6 +39,20 @@ export const CONTENT_WARNING_LABELS = {
 };
 
 /**
+ * The six values of `content_type` in shared/contracts/content.schema.json, in
+ * words. An unrecognised one falls through to the raw value in the caller
+ * rather than to a blank, for the same reason unknown warnings are shown.
+ */
+export const CONTENT_TYPE_LABELS = {
+  pdf: "PDF",
+  research_paper: "Research paper",
+  plain_text: "Pasted text",
+  website: "Web page",
+  youtube: "YouTube video",
+  uploaded_video: "Uploaded video",
+};
+
+/**
  * Warning codes we do not recognise are shown, not hidden.
  *
  * Module 2 can add a code without this file knowing about it. Dropping the

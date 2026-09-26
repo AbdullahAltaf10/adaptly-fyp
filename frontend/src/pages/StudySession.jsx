@@ -201,6 +201,7 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
         <PreSessionCheck
           check={preSession}
           warnings={document_.content?.warnings ?? []}
+          document={contentId ? { loading: document_.loading, error: document_.error } : undefined}
           onStart={() => setStarted(true)}
           panelStyle={panelStyle}
         />

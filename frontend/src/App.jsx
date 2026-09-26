@@ -10,7 +10,7 @@
  * Route shape:
  *
  *   /signin  /register  /verify-email  /forgot-password    signed out
- *   /library /study /analytics /settings                   signed in
+ *   /library /library/new /study /analytics /settings      signed in
  *
  * The signed-in routes sit behind `RequireAuth`, which also handles the states
  * between "signed out" and "ready" - no profile row yet, unverified address,
@@ -33,7 +33,9 @@ import VerifyEmailPage from "./auth/VerifyEmailPage";
 import AppShell from "./routes/AppShell";
 import RequireAuth from "./routes/RequireAuth";
 import AnalyticsDashboardContainer from "./pages/AnalyticsDashboardContainer";
-import StudySession from "./pages/StudySession";
+import LibraryPage from "./content/LibraryPage";
+import UploadPage from "./content/UploadPage";
+import StudyRoute from "./routes/StudyRoute";
 import { Card, CenteredPage } from "./ui";
 
 /** Keeps a signed-in learner off the signed-out screens. */
@@ -52,30 +54,6 @@ function NotFound() {
         </a>
       </Card>
     </CenteredPage>
-  );
-}
-
-/**
- * Module 2's document list lands here next.
- *
- * A named placeholder rather than a missing route, so the nav item is not a
- * dead link and the gap is visible instead of silently absent.
- */
-function LibraryPlaceholder() {
-  return (
-    <Card
-      title="My documents"
-      subtitle="Uploading and choosing a document is the next piece of Module 2's frontend."
-    >
-      <p className="text-muted">
-        The six ingest endpoints already exist on the backend. Until this screen calls them, start
-        a session from{" "}
-        <a href="/study" className="text-accent hover:underline">
-          Study session
-        </a>
-        .
-      </p>
-    </Card>
   );
 }
 
@@ -126,8 +104,9 @@ export default function App() {
           }
         >
           <Route path="/" element={<Navigate to="/library" replace />} />
-          <Route path="/library" element={<LibraryPlaceholder />} />
-          <Route path="/study" element={<StudySession />} />
+          <Route path="/library" element={<LibraryPage />} />
+          <Route path="/library/new" element={<UploadPage />} />
+          <Route path="/study" element={<StudyRoute />} />
           <Route path="/analytics" element={<AnalyticsDashboardContainer />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
