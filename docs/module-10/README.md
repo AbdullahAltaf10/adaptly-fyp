@@ -23,7 +23,7 @@ applicable," never silently scored as zero.
 | Issue # | Title | Status | Detail doc |
 |---|---|---|---|
 | 72 | Module 10 compliance report contract and Engagement Quality Score engine | ✅ Done | [issue-72-score-engine.md](issue-72-score-engine.md) |
-| 73 | Module 10 critical-section attestation evidence | ⬜ Not started | — |
+| 73 | Module 10 critical-section attestation evidence | ✅ Done | [issue-73-critical-evidence.md](issue-73-critical-evidence.md) |
 | 74 | Module 10 compliance report storage and API | ⬜ Not started | — |
 | 75 | Module 10 attestation report views (frontend) | ⬜ Not started | — |
 | 76 | Generate the compliance report automatically at session end (blocked) | ⬜ Blocked — issue only, not implemented | — |
@@ -87,5 +87,5 @@ doesn't support.
   to believe so; dropping a component redistributes its weight across the
   rest rather than letting it silently count as a zero.
 - **Critical-section evidence is per chunk, not per paragraph** — see
-  [issue-73's doc] once it exists for the full reasoning; Module 8 has no
-  paragraph-level granularity to draw on today.
+  [issue-73-critical-evidence.md](issue-73-critical-evidence.md) for the full
+  reasoning; Module 8 has no paragraph-level granularity to draw on today.
