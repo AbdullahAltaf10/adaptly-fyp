@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 def _repositories():
-    from backend.app.analytics.persistence.client import get_database
-    from backend.app.analytics.service.finalization import AnalyticsRepositories
+    from app.analytics.persistence.client import get_database
+    from app.analytics.service.finalization import AnalyticsRepositories
 
     return AnalyticsRepositories.from_database(get_database())
 
@@ -45,7 +45,7 @@ def create_session_safely(uid: str, session_id: str, content_id: str | None) -> 
     if not content_id:
         return
     try:
-        from backend.app.analytics.persistence.base import format_timestamp, utc_now
+        from app.analytics.persistence.base import format_timestamp, utc_now
 
         repositories = _repositories()
         repositories.sessions.upsert_session(
@@ -74,7 +74,7 @@ def finalize_session_safely(uid: str, session_id: str) -> None:
     """
 
     try:
-        from backend.app.analytics.service.finalization import finalize_session
+        from app.analytics.service.finalization import finalize_session
 
         repositories = _repositories()
         finalize_session(session_id, uid, repositories)

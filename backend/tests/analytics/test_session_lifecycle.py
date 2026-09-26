@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import mongomock
 
-from backend.app.analytics.service import session_lifecycle
-from backend.app.analytics.service.finalization import AnalyticsRepositories
+from app.analytics.service import session_lifecycle
+from app.analytics.service.finalization import AnalyticsRepositories
 
 
 def _repositories() -> AnalyticsRepositories:
@@ -57,7 +57,7 @@ class FinalizeSessionSafelyTests(unittest.TestCase):
 
         with patch.object(session_lifecycle, "_repositories", return_value=_repositories()):
             with patch(
-                "backend.app.analytics.service.finalization.finalize_session",
+                "app.analytics.service.finalization.finalize_session",
                 side_effect=fake_finalize_session,
             ):
                 session_lifecycle.finalize_session_safely("user-1", "session-1")
@@ -77,7 +77,7 @@ class FinalizeSessionSafelyTests(unittest.TestCase):
     def test_swallows_errors_raised_by_finalize_session_itself(self):
         with patch.object(session_lifecycle, "_repositories", return_value=_repositories()):
             with patch(
-                "backend.app.analytics.service.finalization.finalize_session",
+                "app.analytics.service.finalization.finalize_session",
                 side_effect=RuntimeError("unexpected failure"),
             ):
                 try:
