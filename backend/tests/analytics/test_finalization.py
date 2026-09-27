@@ -12,7 +12,7 @@ from typing import Any
 
 import mongomock
 
-from backend.app.analytics.service.finalization import (
+from app.analytics.service.finalization import (
     ELIGIBLE_STATUSES,
     AnalyticsRepositories,
     SessionAccessDeniedError,

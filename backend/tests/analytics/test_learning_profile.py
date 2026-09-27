@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from backend.app.analytics.domain.learning_profile import (
+from app.analytics.domain.learning_profile import (
     DEFAULT_LEARNING_PROFILE_CONFIG,
     LearningProfileConfig,
     build_learning_profile,
@@ -927,7 +927,7 @@ class ContractAndPrivacyTests(unittest.TestCase):
     def test_module_never_references_raw_biometric_or_webcam_fields(self) -> None:
         import inspect
 
-        from backend.app.analytics.domain import learning_profile as module
+        from app.analytics.domain import learning_profile as module
 
         source = inspect.getsource(module)
         for forbidden in (
@@ -946,7 +946,7 @@ class ContractAndPrivacyTests(unittest.TestCase):
     def test_public_function_accepts_only_summaries_no_raw_event_parameters(self) -> None:
         import inspect
 
-        from backend.app.analytics.domain.learning_profile import build_learning_profile
+        from app.analytics.domain.learning_profile import build_learning_profile
 
         signature = inspect.signature(build_learning_profile)
         parameter_names = set(signature.parameters)

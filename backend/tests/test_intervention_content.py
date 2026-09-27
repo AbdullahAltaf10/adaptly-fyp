@@ -254,6 +254,46 @@ def test_an_empty_passage_has_no_prompt():
         prompts.build_prompt(prompts.TASK_SIMPLIFY, "   ")
 
 
+def test_simplify_asks_for_an_analogy_and_bullets_does_not():
+    """
+    Scope 6.4: simplification "rewrites it in simpler language with an
+    analogy". A bullet summary is a different job - an analogy inside a list
+    of bullets is noise rather than help - so the instruction belongs to one
+    task only, and this asserts the two have not drifted into each other.
+    """
+    simplify_prompt = prompts.build_prompt(prompts.TASK_SIMPLIFY, PASSAGE)
+    bullets_prompt = prompts.build_prompt(prompts.TASK_BULLETS, PASSAGE)
+
+    assert "analogy" in simplify_prompt
+    assert "analogy" not in bullets_prompt
+
+
+def test_the_analogy_may_not_smuggle_in_new_facts():
+    """
+    The analogy is the one exception to "keep all of the information, add
+    nothing". The exception has to stay narrow: a comparison to something
+    familiar is fine, a new claim about the subject is not, because once it is
+    written in the same plain language as the rewrite a learner cannot tell
+    the two apart.
+    """
+    prompt = prompts.build_prompt(prompts.TASK_SIMPLIFY, PASSAGE)
+
+    assert "must not state any new fact" in prompt
+    # The blanket rule also had to be narrowed, or the two instructions
+    # contradict each other and the model picks whichever it likes.
+    assert "Do not add facts, figures, or claims" in prompt
+    assert "Do not add anything that is not in the text." not in prompt
+
+
+def test_the_prompt_version_moved_with_the_wording():
+    """
+    PROMPT_VERSION is part of the cache key. Adding the analogy without
+    bumping it would have kept serving cached v1 rewrites that have no analogy
+    in them, and nothing would have looked broken.
+    """
+    assert prompts.PROMPT_VERSION == "v2"
+
+
 # --------------------------------------------------------------------------
 # Refusing rather than pretending
 # --------------------------------------------------------------------------

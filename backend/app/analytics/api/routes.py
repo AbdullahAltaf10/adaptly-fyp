@@ -16,11 +16,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from backend.app.analytics.api.deps import get_repositories
-from backend.app.analytics.domain.metrics import DEFAULT_CONFIG, METRIC_VERSION
-from backend.app.analytics.persistence.base import format_timestamp, utc_now
-from backend.app.analytics.service.finalization import AnalyticsRepositories
-from backend.app.api.deps import get_current_user_id
+from app.analytics.api.deps import get_repositories
+from app.analytics.domain.metrics import DEFAULT_CONFIG, METRIC_VERSION
+from app.analytics.persistence.base import format_timestamp, utc_now
+from app.analytics.service.finalization import AnalyticsRepositories
+from app.api.deps import get_current_user_id
 
 router = APIRouter(tags=["module-8-analytics"])
 

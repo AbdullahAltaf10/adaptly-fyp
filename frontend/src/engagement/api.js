@@ -14,9 +14,16 @@ import api from "../api/client";
  * This clears any rule state left over from a previous session using the same
  * id. Without it, a learner who closed the tab and came back inherited the
  * fatigue evidence and confirmation streaks they left behind.
+ *
+ * `contentId` is optional and sent only when the caller has one. Module 8's
+ * own session record (Issue #82) needs it to be created at all -- without
+ * it, the backend safely no-ops instead of writing an invalid record.
  */
-export function startSession(sessionId) {
-  return api.post("/engagement/session/start", { session_id: sessionId });
+export function startSession(sessionId, contentId) {
+  return api.post("/engagement/session/start", {
+    session_id: sessionId,
+    ...(contentId ? { content_id: contentId } : {}),
+  });
 }
 
 /** Mark the end of a session and release its rule state. */

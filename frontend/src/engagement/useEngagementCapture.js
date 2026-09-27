@@ -190,7 +190,7 @@ export function useEngagementCapture({
         // state carry across the change.
         await endSession(sessionId).catch(() => {});
         sessionIdRef.current = newSessionId();
-        await startSession(sessionIdRef.current).catch(() => {});
+        await startSession(sessionIdRef.current, contentId).catch(() => {});
 
         windowRef.current = [];
         setFramesCollected(0);
@@ -233,7 +233,7 @@ export function useEngagementCapture({
 
         // The backend also creates a session lazily on the first /analyze, so
         // a failure here costs the explicit reset and nothing else.
-        await startSession(sessionId).catch(() => {});
+        await startSession(sessionId, contentId).catch(() => {});
         if (cancelled) return;
 
         setReady(true);
