@@ -7,6 +7,7 @@ from app.ai_assistant.schemas import (
     AssistantMessageRequest,
     ConversationMessage,
     EmotionSignal,
+    GlossaryEntry,
     NormalizedContentContext,
     NormalizedSessionContext,
 )
@@ -53,6 +54,7 @@ def build_assistant_context(
     request: AssistantMessageRequest,
     emotion_signal: EmotionSignal = "neutral",
     engagement_state: str | None = None,
+    glossary: list | None = None,
 ) -> AssistantContext:
     """Normalize available request data into one prompt-ready context object."""
     content_metadata = request.content_context
@@ -65,6 +67,7 @@ def build_assistant_context(
             title=content_metadata.title if content_metadata else None,
             content_type=content_metadata.content_type if content_metadata else None,
             language=content_metadata.language if content_metadata else None,
+            glossary=[GlossaryEntry(**entry) for entry in (glossary or [])],
         ),
         chunk=request.current_chunk.model_copy(deep=True),
         session=NormalizedSessionContext(

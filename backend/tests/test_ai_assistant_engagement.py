@@ -155,7 +155,10 @@ def test_the_state_is_not_placed_in_the_untrusted_section():
 def _capture_state(monkeypatch):
     seen = {}
 
-    def fake(request, settings=None, client_factory=None, engagement_state=None):
+    def fake(request, settings=None, client_factory=None, engagement_state=None, **kwargs):
+        # **kwargs so this stub survives the endpoint gaining another
+        # server-derived argument - the document glossary was the next one -
+        # rather than every engagement test failing for an unrelated reason.
         seen["state"] = engagement_state
         return service.create_mock_response(request), None
 

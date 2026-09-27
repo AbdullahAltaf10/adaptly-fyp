@@ -8,14 +8,14 @@ The work splits cleanly in two:
 
   * IDENTIFYING candidate terms is free — it is a text-statistics problem, and
     it is implemented here.
-  * WRITING definitions needs a language model, which needs an API key. That
-    half is deliberately left as a stub, in the same position as video
-    transcription: fully specified, switched on by configuration.
+  * WRITING definitions needs a language model. That half now lives in
+    `app/content/glossary.py`, which runs in the background after ingestion
+    and still returns `[]` when no model is configured.
 
-So `extract_technical_terms` returns real terms today, and `build_glossary`
-returns an empty list until Module 5's language model is wired in. The shared
-content contract already reserves `technical_terms` and `glossary`, and both
-are optional, so producing the first and not the second is valid.
+So `extract_technical_terms` returns real terms, and `build_glossary`
+delegates. The shared content contract reserves `technical_terms` and
+`glossary`, and both are optional, so a document whose glossary has not
+arrived yet is still valid.
 
 How terms are identified, and why this way
 ------------------------------------------
@@ -101,14 +101,13 @@ def build_glossary(terms: list, context: str = "") -> list:
     """
     Definitions for the extracted terms.
 
-    STUB. Returns an empty list until a language model is configured.
+    No longer a stub — `app/content/glossary.py` writes them with whichever
+    language model the server has configured, and still returns `[]` when
+    there is none. Kept here as the name the ingestion path already imports.
 
-    Writing a definition requires understanding the term in context, which is a
-    language-model task — the same reason video transcription is dormant. The
-    contract makes `glossary` optional precisely so this can arrive later
-    without a schema change.
-
-    When implemented, each entry must be {"term": str, "definition": str} to
-    match shared/contracts/content.schema.json.
+    Each entry is {"term": str, "definition": str}, matching
+    shared/contracts/content.schema.json.
     """
-    return []
+    from app.content.glossary import build_glossary as _build
+
+    return _build(terms, context)
