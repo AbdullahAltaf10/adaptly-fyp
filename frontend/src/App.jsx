@@ -11,6 +11,8 @@
  *
  *   /signin  /register  /verify-email  /forgot-password    signed out
  *   /library /library/new /study /analytics /settings      signed in
+ *   /compliance                                            signed in, corporate
+ *   /hr/compliance                                         signed in, hr_admin
  *
  * The signed-in routes sit behind `RequireAuth`, which also handles the states
  * between "signed out" and "ready" - no profile row yet, unverified address,
@@ -33,6 +35,8 @@ import VerifyEmailPage from "./auth/VerifyEmailPage";
 import AppShell from "./routes/AppShell";
 import RequireAuth from "./routes/RequireAuth";
 import AnalyticsDashboardContainer from "./pages/AnalyticsDashboardContainer";
+import ComplianceReportPage from "./pages/ComplianceReportPage";
+import HrComplianceReportsPage from "./pages/HrComplianceReportsPage";
 import LibraryPage from "./content/LibraryPage";
 import UploadPage from "./content/UploadPage";
 import StudyRoute from "./routes/StudyRoute";
@@ -43,6 +47,16 @@ function SignedOutOnly({ children }) {
   const { currentUser, loading } = useAuth();
   if (loading) return children;
   return currentUser ? <Navigate to="/" replace /> : children;
+}
+
+/**
+ * Module 10's HR list is for `hr_admin` only. The backend enforces this
+ * (`require_hr_admin` on `GET /api/compliance/reports`); this only keeps a
+ * non-HR learner from landing on a page that would just show an error.
+ */
+function HrAdminOnly({ children }) {
+  const { profile } = useAuth();
+  return profile?.corporate_role === "hr_admin" ? children : <Navigate to="/compliance" replace />;
 }
 
 function NotFound() {
@@ -108,6 +122,15 @@ export default function App() {
           <Route path="/library/new" element={<UploadPage />} />
           <Route path="/study" element={<StudyRoute />} />
           <Route path="/analytics" element={<AnalyticsDashboardContainer />} />
+          <Route path="/compliance" element={<ComplianceReportPage />} />
+          <Route
+            path="/hr/compliance"
+            element={
+              <HrAdminOnly>
+                <HrComplianceReportsPage />
+              </HrAdminOnly>
+            }
+          />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
 
