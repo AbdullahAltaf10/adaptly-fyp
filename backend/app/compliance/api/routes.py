@@ -17,9 +17,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.auth.authorization import require_hr_admin
 from app.auth.roles import MODE_CORPORATE, ROLE_HR_ADMIN
 from app.core.db import db as users_db
-from backend.app.api.deps import get_current_user_id
-from backend.app.compliance.api.deps import get_repositories
-from backend.app.compliance.service.generation import (
+from app.api.deps import get_current_user_id
+from app.compliance.api.deps import get_repositories
+from app.compliance.service.generation import (
     ComplianceRepositories,
     GenerationResult,
     SessionAccessDeniedError,

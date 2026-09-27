@@ -12,12 +12,12 @@ from unittest.mock import patch
 
 import mongomock
 
-from backend.app.analytics.service.finalization import (
+from app.analytics.service.finalization import (
     AnalyticsRepositories,
     finalize_session,
 )
-from backend.app.compliance.service import session_hooks
-from backend.app.compliance.service.generation import ComplianceRepositories
+from app.compliance.service import session_hooks
+from app.compliance.service.generation import ComplianceRepositories
 from backend.tests.analytics.fixtures import fixture, timestamp
 
 
@@ -74,7 +74,7 @@ class GenerateReportSafelyTests(unittest.TestCase):
         database = mongomock.MongoClient()["adaptly_test"]
         with patch.object(session_hooks, "_repositories", return_value=_repositories(database)):
             with patch(
-                "backend.app.compliance.service.generation.generate_report",
+                "app.compliance.service.generation.generate_report",
                 side_effect=fake_generate_report,
             ):
                 session_hooks.generate_report_safely("user-1", "session-1")
@@ -95,7 +95,7 @@ class GenerateReportSafelyTests(unittest.TestCase):
         database = mongomock.MongoClient()["adaptly_test"]
         with patch.object(session_hooks, "_repositories", return_value=_repositories(database)):
             with patch(
-                "backend.app.compliance.service.generation.generate_report",
+                "app.compliance.service.generation.generate_report",
                 side_effect=RuntimeError("unexpected failure"),
             ):
                 try:

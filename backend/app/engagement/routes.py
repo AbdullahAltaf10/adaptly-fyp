@@ -24,10 +24,12 @@ from app.engagement import (
     session as session_state,
     smoothing,
 )
+from app.engagement.analytics_sink import record_engagement_event
 from app.engagement.calibration import apply_calibration, compute_offset, compute_user_baseline
+from ml.inference.model import CALIBRATED_STRUGGLING_THRESHOLD
 from app.intervention import service as intervention
-from backend.app.analytics.service import session_lifecycle
-from backend.app.compliance.service import session_hooks as compliance_session_hooks
+from app.analytics.service import session_lifecycle
+from app.compliance.service import session_hooks as compliance_session_hooks
 from ml.inference import head_pose
 from ml.inference.features import InvalidLandmarksError, extract_features
 from ml.inference.model import predict
@@ -187,7 +189,19 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
         if calibrated:
             sequence = apply_calibration(sequence, calibration_doc["offset"])
 
-        prediction = predict(sequence)
+        # A learner who has calibrated gets the model trained on centred
+        # features, plus the threshold tuned for it. One who has not keeps
+        # exactly what shipped before, because the calibrated pair fed raw
+        # features flags a third of all windows at a precision lift of 0.99x -
+        # no better than random - which is worse than the status quo.
+        # See ml/inference/model.py for the measured table.
+        prediction = predict(
+            sequence,
+            calibrated=calibrated,
+            struggling_threshold=(
+                CALIBRATED_STRUGGLING_THRESHOLD if calibrated else None
+            ),
+        )
 
         raw_landmarks = [frame.landmarks for frame in payload.frames]
         pose_baseline = calibration_doc.get("pose_baseline") if calibration_doc else None
@@ -285,6 +299,8 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
             deep_thinking_detected=dt_result["deep_thinking"],
             gaze_regression_detected=False,   # never measured; see rereading.py
         )
+
+        record_engagement_event(event)
 
         # Module 4. Wrapped because engagement detection works today and this
         # is new: a fault in the intervention path must not take the analyze

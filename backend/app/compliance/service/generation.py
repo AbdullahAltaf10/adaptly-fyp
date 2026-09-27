@@ -18,13 +18,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from backend.app.analytics.domain.metrics import DEFAULT_CONFIG as METRIC_DEFAULT_CONFIG
-from backend.app.analytics.service.finalization import AnalyticsRepositories
-from backend.app.compliance.domain.report import build_compliance_report
-from backend.app.compliance.domain.score import DEFAULT_CONFIG as SCORE_DEFAULT_CONFIG
-from backend.app.compliance.domain.score import ScoreConfig
-from backend.app.compliance.persistence.base import format_timestamp, utc_now
-from backend.app.compliance.persistence.reports import ComplianceReportRepository
+from app.analytics.domain.metrics import DEFAULT_CONFIG as METRIC_DEFAULT_CONFIG
+from app.analytics.service.finalization import AnalyticsRepositories
+from app.compliance.domain.report import build_compliance_report
+from app.compliance.domain.score import DEFAULT_CONFIG as SCORE_DEFAULT_CONFIG
+from app.compliance.domain.score import ScoreConfig
+from app.compliance.persistence.base import format_timestamp, utc_now
+from app.compliance.persistence.reports import ComplianceReportRepository
 
 Outcome = Literal["generated", "already_exists", "rejected", "no_summary"]
 

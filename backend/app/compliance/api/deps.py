@@ -7,10 +7,12 @@ instance, the same pattern Module 8's own ``analytics/api/deps.py`` uses.
 
 from __future__ import annotations
 
-from backend.app.compliance.persistence.client import get_database
-from backend.app.compliance.service.generation import ComplianceRepositories
+from app.analytics.persistence.client import get_database
+from app.compliance.service.generation import ComplianceRepositories
 
 
 def get_repositories() -> ComplianceRepositories:
+    # Module 8's cached client (#66): one pooled MongoClient per process,
+    # shared with every other module, instead of a new client per request.
     database = get_database()
     return ComplianceRepositories.from_database(database, database)

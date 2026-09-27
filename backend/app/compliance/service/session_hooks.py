@@ -18,13 +18,14 @@ logger = logging.getLogger(__name__)
 
 
 def _repositories():
-    from backend.app.analytics.persistence.client import get_database as get_analytics_database
-    from backend.app.compliance.persistence.client import get_database as get_compliance_database
-    from backend.app.compliance.service.generation import ComplianceRepositories
+    # One call to Module 8's cached client (#66): both repository bundles share
+    # the same pooled MongoClient and database, so a session end never opens
+    # a new connection.
+    from app.analytics.persistence.client import get_database
+    from app.compliance.service.generation import ComplianceRepositories
 
-    return ComplianceRepositories.from_database(
-        get_analytics_database(), get_compliance_database()
-    )
+    database = get_database()
+    return ComplianceRepositories.from_database(database, database)
 
 
 def generate_report_safely(user_id: str, session_id: str) -> None:
@@ -48,7 +49,7 @@ def generate_report_safely(user_id: str, session_id: str) -> None:
     """
 
     try:
-        from backend.app.compliance.service.generation import (
+        from app.compliance.service.generation import (
             SessionAccessDeniedError,
             SessionNotFoundError,
             generate_report,

@@ -18,16 +18,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.auth.authorization as authorization
-import backend.app.compliance.api.routes as compliance_routes
+import app.compliance.api.routes as compliance_routes
 from app.auth.dependencies import get_current_user
-from backend.app.api.deps import get_current_user_id
-from backend.app.analytics.service.finalization import (
+from app.api.deps import get_current_user_id
+from app.analytics.service.finalization import (
     AnalyticsRepositories,
     finalize_session,
 )
-from backend.app.compliance.api.deps import get_repositories
-from backend.app.compliance.api.routes import router
-from backend.app.compliance.service.generation import ComplianceRepositories
+from app.compliance.api.deps import get_repositories
+from app.compliance.api.routes import router
+from app.compliance.service.generation import ComplianceRepositories
 from backend.tests.analytics.fixtures import fixture, timestamp
 
 

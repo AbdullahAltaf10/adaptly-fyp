@@ -34,7 +34,7 @@ function missingReportError() {
 
 function fetchSessionsWith(sessionId) {
   return vi.fn(() =>
-    Promise.resolve({ data: { items: sessionId ? [{ session_id: sessionId }] : [] } })
+    Promise.resolve({ items: sessionId ? [{ session_id: sessionId }] : [] })
   );
 }
 

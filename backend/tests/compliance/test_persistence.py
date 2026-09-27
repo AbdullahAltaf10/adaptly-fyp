@@ -6,7 +6,7 @@ import unittest
 
 import mongomock
 
-from backend.app.compliance.persistence.reports import ComplianceReportRepository
+from app.compliance.persistence.reports import ComplianceReportRepository
 from backend.tests.compliance import fixtures
 
 

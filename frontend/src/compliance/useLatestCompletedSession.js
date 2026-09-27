@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getSessionHistory } from "../analytics/api";
+import { fetchSessionHistory } from "../analytics/api";
 
 /**
  * Resolves the signed-in learner's most recently completed session, so the
@@ -21,7 +21,7 @@ import { getSessionHistory } from "../analytics/api";
  * request itself failed) so callers can show a friendly "nothing yet"
  * message instead of an alert.
  */
-export function useLatestCompletedSession({ enabled = true, fetchSessions = getSessionHistory } = {}) {
+export function useLatestCompletedSession({ enabled = true, fetchSessions = fetchSessionHistory } = {}) {
   const [state, setState] = useState({ status: "loading", sessionId: null, error: null });
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export function useLatestCompletedSession({ enabled = true, fetchSessions = getS
     fetchSessions({ limit: 1 })
       .then((response) => {
         if (cancelled) return;
-        const items = response?.data?.items ?? [];
+        const items = response?.items ?? [];
         if (items.length === 0) {
           setState({ status: "empty", sessionId: null, error: null });
         } else {
