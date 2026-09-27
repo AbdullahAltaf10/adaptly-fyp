@@ -13,7 +13,7 @@ import { ENGAGEMENT_STATE_LABELS } from "./labels";
  * session contiguously — the metric engine only ever emits a segment when
  * it has something to say, so a stretch of time between two segments (or
  * before the first / after the last) is a genuine gap, not "focused by
- * default." Per CLAUDE.md 6.5 ("unknown is not zero"), any such gap is
+ * default." Per PROJECT_CONTEXT.md 6.5 ("unknown is not zero"), any such gap is
  * rendered here as its own "Not measured" block rather than silently
  * stretching a neighboring segment or being dropped from the timeline.
  */

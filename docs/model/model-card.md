@@ -102,7 +102,8 @@ most product-critical signal because it triggers intervention.
 
 All 7 specified features are eye- and head-based, and confusion shows in the
 eyebrows. Adding `brow_raise` and `inter_brow` raised Struggling recall from
-~1% to 10–18%.
+~1% to 10% on the held-out test set (18% on validation — split instability,
+not a range).
 
 An 11-feature version adding mouth features was tested and **rejected**: better
 on the test set, but inconsistent between test and validation (10% vs 6%), where
