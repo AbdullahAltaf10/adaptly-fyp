@@ -503,9 +503,12 @@ Full detail lives in `docs/model/model-card.md`; this is the summary every other
   product-critical number: **10% on the held-out test set** with the model that actually runs
   (18% on validation — that gap is split instability, not a range). Per-subject centring plus a
   tuned threshold was measured to reach ~0.245 recall and 12 of 19 subjects at the selected
-  operating point, **but the calibrated artifacts are not loaded at runtime**, so nothing in the
-  running system benefits from it yet. Re-measure with `ml/evaluation/calibrated_threshold.py`
-  rather than quoting these numbers second-hand.
+  operating point (`ml/evaluation/calibrated_threshold.py`). **It is applied only to learners who
+  have completed calibration** (`ml/inference/model.py`, `CALIBRATED_STRUGGLING_THRESHOLD = 0.36`);
+  a learner without a calibration record gets the original model, because the calibrated model
+  fed uncentred features is no better than random (precision lift 0.99x) and flags a third of all
+  windows. So the practical accuracy of the product depends on whether learners actually
+  calibrate — worth remembering before quoting any of these numbers for a whole cohort.
 - **`blink_rate` is not a real blink rate.** It's byte-identical to `eye_openness` — a real blink
   (100–400ms) can't be measured at a 1-frame-per-second sample rate. Don't build anything that
   depends on it meaning what its name implies.
