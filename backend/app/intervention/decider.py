@@ -98,6 +98,13 @@ class Signals:
     # Read by the policy so it can offer something gentler instead; it can
     # never widen what is offered. See preferences.py.
     discouraged_types: frozenset = frozenset()
+    # What the learner said in the assistant, if anything recent:
+    # "confusion" | "frustration" | None. Scope 6.5 calls this a high-priority
+    # signal, and this is the field Module 6 will read too. It lowers the dwell
+    # gate; it never manufactures a response on its own, because words say the
+    # learner is struggling without saying with which paragraph, or when.
+    # See app/ai_assistant/latest_signal.py.
+    expressed_difficulty: str | None = None
 
 
 @dataclass(frozen=True)

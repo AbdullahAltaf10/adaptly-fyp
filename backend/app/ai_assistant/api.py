@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.ai_assistant.analytics_contracts import build_assistant_events
 from app.ai_assistant.analytics_sink import record_assistant_exchange
+from app.ai_assistant import latest_signal
+from app.ai_assistant.signals import classify_conversational_signal
 from app.engagement import latest_state
 from app.ai_assistant.schemas import AssistantMessageRequest, AssistantMessageResponse
 from app.ai_assistant import service
@@ -43,6 +45,15 @@ def create_assistant_message(
     # error handling, which is more than this issue's wiring needs. A missing
     # model_name on a failed exchange is honest (we don't have it here), not
     # a bug to silently work around.
+    # Scope 6.5 asks for the learner's expressed confusion or frustration to be
+    # passed on as a high-priority signal. Recorded before the provider call so
+    # a model failure cannot lose it: the learner still said what they said.
+    latest_signal.record(
+        user["uid"],
+        request.session_id,
+        classify_conversational_signal(request.question),
+    )
+
     try:
         response, model_name = service.create_assistant_response(
             request,

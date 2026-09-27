@@ -28,6 +28,7 @@ still a visible one in development.
 import logging
 
 from app.intervention import content, contracts, cooldown, preferences, store
+from app.ai_assistant import latest_signal
 from app.intervention.decider import Signals
 from app.intervention.policy import DefaultPolicy
 
@@ -134,6 +135,11 @@ def evaluate(
         engagement_event_id=engagement_event_id,
         # From the learner's own stored profile, never from the request.
         discouraged_types=preferences.discouraged_for(uid),
+        # What the learner told the assistant, if anything recent. Read on the
+        # server and keyed on this uid, for the same reason the engagement
+        # state is: a client must not be able to report how badly it is
+        # struggling. See app/ai_assistant/latest_signal.py.
+        expressed_difficulty=latest_signal.get(uid, session_id),
     )
 
     history = store.list_for_session(session_id)

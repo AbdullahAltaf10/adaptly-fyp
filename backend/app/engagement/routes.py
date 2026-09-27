@@ -29,6 +29,7 @@ from app.engagement.analytics_sink import record_engagement_event
 from app.engagement.calibration import apply_calibration, compute_offset, compute_user_baseline
 from ml.inference.model import CALIBRATED_STRUGGLING_THRESHOLD
 from app.intervention import service as intervention
+from app.ai_assistant import latest_signal
 from app.analytics.service import session_lifecycle
 from app.compliance.service import session_hooks as compliance_session_hooks
 from ml.inference import head_pose
@@ -119,6 +120,9 @@ def end_session(payload: SessionRequest, user=Depends(get_current_user)):
     # set that knows nothing about interventions.
     intervention.on_session_end(user["uid"], payload.session_id)
     latest_state.clear(user["uid"], payload.session_id)
+    # The same for anything the learner said to the assistant: it belongs to
+    # the session that just ended, not to the next one.
+    latest_signal.clear(user["uid"], payload.session_id)
     result = session_state.end(user["uid"], payload.session_id)
     # Module 8's own finalization (Issue #82). Failure-safe: never raises,
     # so a database or analytics problem cannot prevent a session from
