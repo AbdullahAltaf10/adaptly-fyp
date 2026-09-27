@@ -599,9 +599,12 @@ def calculate_recoveries(
     return recoveries
 
 
-def calculate_recovery_metrics(
-    recovery_results: Sequence[Mapping[str, Any]],
-) -> dict[str, int | float | None]:
+def _recovery_figures(recovery_results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """The four recovery numbers for one set of results.
+
+    Shared by the session total and by each per-type breakdown so the two can
+    never drift into meaning different things.
+    """
     eligible_count = len(recovery_results)
     durations = [
         float(result["recovery_duration_seconds"])
@@ -619,6 +622,46 @@ def calculate_recovery_metrics(
             _round_number(sum(durations) / recovered_count) if recovered_count else None
         ),
     }
+
+
+def calculate_recovery_metrics(
+    recovery_results: Sequence[Mapping[str, Any]],
+    interventions: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Recovery for the session, and - given `interventions` - per response type.
+
+    Scope 6.8 asks for "the average recovery time after each type of response",
+    not one number across all four. A break and a bullet summary are different
+    promises: a summary should show its effect quickly, a break may not recover
+    inside the window at all, and averaging them together describes neither.
+
+    `interventions` is optional so every existing caller keeps working and
+    stored summaries computed before this stay valid - `by_type` is simply
+    absent from those, which is why the contract does not require it.
+    """
+    metrics = _recovery_figures(recovery_results)
+    if interventions is None:
+        return metrics
+
+    type_by_id = {
+        intervention.get("intervention_id"): intervention.get("intervention_type")
+        for intervention in interventions
+    }
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for result in recovery_results:
+        intervention_type = type_by_id.get(result.get("intervention_id"))
+        if not intervention_type:
+            # A recovery whose intervention is not in this session's events
+            # cannot be attributed to a type. It still counts in the session
+            # total above; it just cannot appear under a heading.
+            continue
+        grouped.setdefault(intervention_type, []).append(result)
+
+    metrics["by_type"] = [
+        {"intervention_type": intervention_type, **_recovery_figures(results)}
+        for intervention_type, results in sorted(grouped.items())
+    ]
+    return metrics
 
 
 def classify_intervention_effectiveness(
@@ -943,7 +986,9 @@ def build_session_summary(
     intervention_metrics = calculate_intervention_metrics(
         bounded_intervention_events, recoveries
     )
-    recovery_metrics = calculate_recovery_metrics(recoveries)
+    recovery_metrics = calculate_recovery_metrics(
+        recoveries, bounded_intervention_events
+    )
     assistant_usage = calculate_assistant_usage(bounded_assistant_events)
     critical_metrics, chunks_completed = _critical_section_metrics(
         timeline, chunk_context

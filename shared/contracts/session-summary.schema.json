@@ -325,6 +325,56 @@
             "null"
           ],
           "exclusiveMinimum": 0
+        },
+        "by_type": {
+          "description": "Recovery per response type (scope 6.8: the average recovery time after each type of response). Optional, and absent from summaries computed before it existed, so those stay valid without recomputation. A type appears only when at least one of its interventions was eligible for recovery.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "intervention_type",
+              "eligible_intervention_count",
+              "recovered_intervention_count",
+              "recovery_rate",
+              "average_recovery_time_seconds"
+            ],
+            "properties": {
+              "intervention_type": {
+                "type": "string",
+                "enum": [
+                  "simplify_content",
+                  "bullet_summary",
+                  "break_suggestion",
+                  "assistant_help_prompt",
+                  "other"
+                ]
+              },
+              "eligible_intervention_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "recovered_intervention_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "recovery_rate": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1
+              },
+              "average_recovery_time_seconds": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "exclusiveMinimum": 0
+              }
+            }
+          }
         }
       },
       "allOf": [
