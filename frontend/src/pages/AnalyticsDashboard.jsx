@@ -114,7 +114,10 @@ export default function AnalyticsDashboard({
             totalDurationSeconds={data.summary.duration_seconds}
             sessionStartIso={computeSessionStartIso(data.summary)}
           />
-          <InterventionSection interventionMetrics={data.summary.intervention_metrics} />
+          <InterventionSection
+            interventionMetrics={data.summary.intervention_metrics}
+            recoveryMetrics={data.summary.recovery_metrics}
+          />
           <InterventionLog
             interventions={data.interventions}
             sessionStartIso={computeSessionStartIso(data.summary)}
