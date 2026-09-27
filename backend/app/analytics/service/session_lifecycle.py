@@ -77,6 +77,21 @@ def finalize_session_safely(uid: str, session_id: str) -> None:
         from app.analytics.service.finalization import finalize_session
 
         repositories = _repositories()
-        finalize_session(session_id, uid, repositories)
+        result = finalize_session(session_id, uid, repositories)
     except Exception:  # noqa: BLE001 - must never break ending a session
         logger.exception("Module 8 finalization failed for session_id=%s", session_id)
+        return
+
+    # The learning profile is built from finalized summaries, so it can only
+    # change when finalization actually produced one. `already_finalized` is
+    # included on purpose: a retried session end is then what repairs a profile
+    # whose previous refresh failed, rather than leaving it stale until the next
+    # session. It has its own safety net, so it cannot turn a finalized session
+    # into a failed one.
+    #
+    # Read defensively: this function's contract is that it never raises, and an
+    # unexpected result shape (or None) must not be the thing that breaks it.
+    if getattr(result, "outcome", None) in ("finalized", "already_finalized"):
+        from app.analytics.service.profile_refresh import refresh_learning_profile_safely
+
+        refresh_learning_profile_safely(uid, repositories)
