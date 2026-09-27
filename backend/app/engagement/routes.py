@@ -153,6 +153,28 @@ def calibrate(payload: CalibrateRequest, user=Depends(get_current_user)):
     return {"message": "Calibration complete"}
 
 
+@router.get("/calibration")
+def calibration_status(user=Depends(get_current_user)):
+    """Whether this learner has a calibration on record. A boolean, nothing more.
+
+    The stored record holds a feature offset and head-pose and brow baselines,
+    which are derived from the learner's face. None of that leaves the server:
+    the frontend only needs to know whether to nudge the learner to calibrate,
+    so that is all it is told.
+
+    It matters more than it used to. A learner with a calibration record is
+    served the per-subject-centred model with its tuned threshold; one without
+    keeps the original model, because the calibrated model fed uncentred
+    features is no better than random (ml/inference/model.py has the table).
+    Until now nothing told a learner which of those they were getting.
+
+    Read-only and keyed on the caller's own uid, so there is no way to ask about
+    anybody else.
+    """
+    record = db.calibration.find_one({"uid": user["uid"]}, {"_id": 1})
+    return {"calibrated": record is not None}
+
+
 @router.post("/analyze")
 def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
     """

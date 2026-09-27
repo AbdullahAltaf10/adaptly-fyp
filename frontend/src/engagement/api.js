@@ -76,3 +76,14 @@ export function analyze(
 // `is_critical` is deliberately NOT sent. It used to be, and that let a client
 // lower its own intervention thresholds by claiming a section mattered. The
 // server reads it from the stored chunk now.
+
+/**
+ * Whether this learner has a calibration on record: `{ calibrated: boolean }`.
+ *
+ * A boolean by design. The stored calibration is derived from the learner's
+ * face and never leaves the server; the UI only needs to know whether to
+ * suggest calibrating.
+ */
+export function fetchCalibrationStatus() {
+  return api.get("/engagement/calibration");
+}

@@ -49,8 +49,21 @@ function Row({ ok, children }) {
  * nothing to read, and one whose document failed to load gets the same with no
  * explanation - the error used to sit behind this dialog where nobody could see
  * it. Neither is the camera's fault, so it is reported separately.
+ *
+ * `calibrated` is `true`, `false` or `null` (unknown). It is advice and never a
+ * gate: someone who has not calibrated can still study, but they are served the
+ * original engagement model rather than the one tuned to their own baseline, and
+ * the two differ enough to be worth a sentence. `null` says nothing at all -
+ * "we could not check" must not turn into "you have not calibrated".
  */
-export default function PreSessionCheck({ check, warnings = [], document, onStart, panelStyle }) {
+export default function PreSessionCheck({
+  check,
+  warnings = [],
+  document,
+  calibrated = null,
+  onStart,
+  panelStyle,
+}) {
   const problem = CAMERA_PROBLEMS[check.camera];
   const documentLoading = Boolean(document?.loading);
   const documentError = document?.error ?? null;
@@ -99,6 +112,16 @@ export default function PreSessionCheck({ check, warnings = [], document, onStar
               <Row ok={check.cameraReady}>
                 {check.cameraReady ? "Camera is working" : "Camera is not available"}
               </Row>
+              {check.cameraReady && calibrated === true && (
+                <Row ok={true}>Calibrated to you - support is tuned to your own baseline</Row>
+              )}
+              {check.cameraReady && calibrated === false && (
+                <Row ok={null}>
+                  Not calibrated yet. You can start now, but support is less accurate until you
+                  calibrate - there is a Calibrate button once the session begins, and it is
+                  remembered for next time.
+                </Row>
+              )}
               {check.cameraReady && (
                 <Row ok={check.lowLight === null ? null : !check.lowLight}>
                   {check.lowLight === null
