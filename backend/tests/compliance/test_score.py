@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from backend.app.compliance.domain.score import (
+from app.compliance.domain.score import (
     COMPONENT_KEYS,
     DEFAULT_CONFIG,
     ScoreConfig,

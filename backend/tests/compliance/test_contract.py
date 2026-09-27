@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from backend.app.compliance.domain.score import build_engagement_quality_score
+from app.compliance.domain.score import build_engagement_quality_score
 from backend.tests.analytics.test_metrics import assert_schema_match
 from backend.tests.compliance import fixtures
 
