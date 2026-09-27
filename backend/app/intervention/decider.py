@@ -94,6 +94,10 @@ class Signals:
     is_critical: bool = False       # set by Module 9; always False until then
     dwell_seconds: float = 0.0      # time on this chunk; 0 until a viewer exists
     engagement_event_id: str | None = None
+    # Response types this learner's own history says have not helped them.
+    # Read by the policy so it can offer something gentler instead; it can
+    # never widen what is offered. See preferences.py.
+    discouraged_types: frozenset = frozenset()
 
 
 @dataclass(frozen=True)

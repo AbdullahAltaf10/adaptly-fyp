@@ -27,7 +27,7 @@ still a visible one in development.
 
 import logging
 
-from app.intervention import content, contracts, cooldown, store
+from app.intervention import content, contracts, cooldown, preferences, store
 from app.intervention.decider import Signals
 from app.intervention.policy import DefaultPolicy
 
@@ -132,6 +132,8 @@ def evaluate(
         is_critical=content.is_critical(uid, content_id, chunk_id),
         dwell_seconds=max(0.0, min(float(dwell_seconds or 0.0), MAX_DWELL_SECONDS)),
         engagement_event_id=engagement_event_id,
+        # From the learner's own stored profile, never from the request.
+        discouraged_types=preferences.discouraged_for(uid),
     )
 
     history = store.list_for_session(session_id)
