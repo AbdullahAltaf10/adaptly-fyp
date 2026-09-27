@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.ai_assistant.analytics_contracts import build_assistant_events
 from app.ai_assistant.analytics_sink import record_assistant_exchange
+from app.content.glossary import glossary_for
 from app.engagement import latest_state
 from app.ai_assistant.schemas import AssistantMessageRequest, AssistantMessageResponse
 from app.ai_assistant import service
@@ -49,6 +50,10 @@ def create_assistant_message(
             # Read on the server, keyed on the caller's own uid, so it can
             # neither be forged by the request nor leak between learners.
             engagement_state=latest_state.get(user["uid"], request.session_id),
+            # Module 2 prepared this at ingestion so the agent can explain a
+            # term instantly (scope 6.2). Read here rather than taken from
+            # the request, for the same reason as the engagement state.
+            glossary=glossary_for(request.content_id),
         )
     except service.AssistantConfigurationError as error:
         _record_exchange_safely(
