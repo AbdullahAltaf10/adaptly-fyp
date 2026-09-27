@@ -40,8 +40,21 @@ function Row({ ok, children }) {
   );
 }
 
-export default function PreSessionCheck({ check, warnings = [], onStart, panelStyle }) {
+/**
+ * `document` is the state of the document this session is about, when it has
+ * one: `{ loading, error }`, or omitted for a camera-only session.
+ *
+ * It gates Start for the same reason the camera does. A learner who chose a
+ * document and then hits Start while it is still loading gets a session with
+ * nothing to read, and one whose document failed to load gets the same with no
+ * explanation - the error used to sit behind this dialog where nobody could see
+ * it. Neither is the camera's fault, so it is reported separately.
+ */
+export default function PreSessionCheck({ check, warnings = [], document, onStart, panelStyle }) {
   const problem = CAMERA_PROBLEMS[check.camera];
+  const documentLoading = Boolean(document?.loading);
+  const documentError = document?.error ?? null;
+  const canStart = check.cameraReady && !documentLoading && !documentError;
 
   return (
     <div
@@ -103,6 +116,23 @@ export default function PreSessionCheck({ check, warnings = [], onStart, panelSt
           <p style={{ color: "#b3261e", margin: "0.5rem 0" }}>{problem}</p>
         )}
 
+        {documentLoading && (
+          <p role="status" style={{ margin: "0.5rem 0" }}>
+            Loading your document...
+          </p>
+        )}
+
+        {documentError && (
+          <div role="alert" style={{ margin: "0.5rem 0", color: "#b3261e" }}>
+            <p style={{ margin: "0 0 0.25rem" }}>
+              This document could not be opened, so there is nothing to read in this session.
+            </p>
+            <a href="/library" style={{ color: "inherit", textDecoration: "underline" }}>
+              Choose another document
+            </a>
+          </div>
+        )}
+
         {warnings.length > 0 && (
           <div style={{ margin: "0.75rem 0" }}>
             <h4 style={{ margin: "0 0 0.35rem", fontSize: "0.95rem" }}>
@@ -125,7 +155,7 @@ export default function PreSessionCheck({ check, warnings = [], onStart, panelSt
         </ol>
 
         <div style={{ marginTop: "0.5rem" }}>
-          <button onClick={onStart} disabled={!check.cameraReady}>
+          <button onClick={onStart} disabled={!canStart}>
             Start session
           </button>
           {!check.cameraReady && !check.checking && (

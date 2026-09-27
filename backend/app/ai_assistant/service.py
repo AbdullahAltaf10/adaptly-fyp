@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 import logging
+import time
 import re
 from typing import Any
 
@@ -177,24 +178,59 @@ def _log_provider_failure(
     )
 
 
+# Retrying a transient Gemini failure, the same shape Modules 4 and 8 already use.
+#
+# Measured, not assumed: three live attempts in a row, two returned "provider
+# unavailable" before one went through. A learner asking a question mid-session
+# should not have to press retry for something the server can simply try again.
+#
+# Only 429 and 5xx are retried, and deliberately NOT timeouts. A timeout here is
+# 60 seconds; three of them is three minutes of a learner watching a spinner,
+# which is worse than the error. Every other 4xx (a bad key, a rejected prompt)
+# fails immediately, because asking again cannot change the answer.
+RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503})
+MAX_ATTEMPTS = 3
+BACKOFF_SECONDS = (1.0, 2.0)
+
+
+def _is_retryable(error: Exception) -> bool:
+    if _is_timeout_error(error):
+        return False
+    code = _provider_error_code(error)
+    return isinstance(code, int) and code in RETRYABLE_STATUS_CODES
+
+
+def _generate_with_retry(client, model: str, prompt: str, sleep=time.sleep):
+    """Call Gemini, retrying only failures that asking again could fix."""
+    attempt = 0
+    while True:
+        try:
+            return client.models.generate_content(model=model, contents=prompt)
+        except Exception as error:
+            attempt += 1
+            if attempt >= MAX_ATTEMPTS or not _is_retryable(error):
+                raise
+            sleep(BACKOFF_SECONDS[min(attempt - 1, len(BACKOFF_SECONDS) - 1)])
+
+
 def create_gemini_response(
     request: AssistantMessageRequest,
     settings: AssistantSettings,
     client_factory: GeminiClientFactory = create_gemini_client,
+    engagement_state: str | None = None,
 ) -> AssistantMessageResponse:
     """Send a separated learning prompt to Gemini and return its answer."""
     if not settings.gemini_api_key:
         raise AssistantConfigurationError("Gemini is not configured for this server.")
 
     emotion_signal = classify_conversational_signal(request.question)
-    context = build_assistant_context(request, emotion_signal=emotion_signal)
+    context = build_assistant_context(
+        request, emotion_signal=emotion_signal, engagement_state=engagement_state
+    )
     prompt = build_assistant_prompt(context)
     try:
         client = client_factory(settings.gemini_api_key, settings.gemini_timeout_ms)
-        provider_response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=prompt,
-        )
+        provider_response = _generate_with_retry(client, settings.gemini_model, prompt)
         answer = _extract_response_text(provider_response)
     except AssistantProviderError as error:
         _log_provider_failure(error, settings, request)
@@ -212,6 +248,7 @@ def create_assistant_response(
     request: AssistantMessageRequest,
     settings: AssistantSettings | None = None,
     client_factory: GeminiClientFactory | None = None,
+    engagement_state: str | None = None,
 ) -> tuple[AssistantMessageResponse, str | None]:
     """Select local mock or real Gemini mode using centralized settings.
 
@@ -231,5 +268,6 @@ def create_assistant_response(
         request,
         resolved_settings,
         client_factory or create_gemini_client,
+        engagement_state=engagement_state,
     )
     return response, resolved_settings.gemini_model

@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../analytics/api", () => ({
   fetchMostRecentCompletedSession: vi.fn(),
   fetchSessionAnalytics: vi.fn(),
+  requestInsightReport: vi.fn(),
 }));
 
 import { MOCK_SCENARIOS } from "../analytics/mockData";
@@ -97,5 +98,48 @@ describe("AnalyticsDashboardContainer", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/something went wrong/i);
+  });
+});
+
+describe("AnalyticsDashboardContainer report generation", () => {
+  const SESSION = { session_id: "sess-9", completed_at: "2026-08-17T09:20:00Z" };
+  const base = MOCK_SCENARIOS.NORMAL_COMPLETED_SESSION;
+  const pending = { ...base, insightReport: { status: "pending", report_text: null } };
+
+  it("requests the report for the loaded session, then refetches analytics", async () => {
+    const done = {
+      ...base,
+      insightReport: { status: "generated", report_text: "Written by the server." },
+    };
+    const fetchAnalytics = vi.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(done);
+    const requestReport = vi.fn().mockResolvedValue({ retried: true, message: null });
+
+    render(
+      <AnalyticsDashboardContainer
+        fetchRecentSession={resolvedRecentSession(SESSION)}
+        fetchAnalytics={fetchAnalytics}
+        requestReport={requestReport}
+      />,
+    );
+
+    expect(await screen.findByText("Written by the server.")).toBeInTheDocument();
+    expect(requestReport).toHaveBeenCalledWith("sess-9");
+    expect(fetchAnalytics).toHaveBeenLastCalledWith("sess-9");
+  });
+
+  it("still refetches when the request itself fails", async () => {
+    const fetchAnalytics = vi.fn().mockResolvedValue(pending);
+    const requestReport = vi.fn().mockRejectedValue(new Error("down"));
+
+    render(
+      <AnalyticsDashboardContainer
+        fetchRecentSession={resolvedRecentSession(SESSION)}
+        fetchAnalytics={fetchAnalytics}
+        requestReport={requestReport}
+      />,
+    );
+
+    expect(await screen.findByText(/not available for this session right now/)).toBeInTheDocument();
+    expect(fetchAnalytics.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

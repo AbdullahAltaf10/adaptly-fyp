@@ -31,9 +31,20 @@ level information.
 | 29 | Build Module 8 analytics and session history APIs | ✅ Done | [issue-29-apis.md](issue-29-apis.md) |
 | 30 | Build Module 8 post-session analytics dashboard shell | ✅ Done | [issue-30-dashboard-shell.md](issue-30-dashboard-shell.md) |
 | 31 | Add Module 8 engagement timeline and intervention log | ✅ Done | [issue-31-engagement-timeline.md](issue-31-engagement-timeline.md) |
-| 32 | Implement Module 8 Gemini insight report and fallback | ⬜ Not started | — |
+| 32 | Implement Module 8 Gemini insight report and fallback | ✅ Done | [issue-32-insight-report.md](issue-32-insight-report.md) |
 | 33 | Build Module 8 multi-session learning profile | ⬜ Not started | — |
 | 34 | Integrate Module 8 with Modules 3, 4, and 5 | ⬜ Not started | — |
+
+### Gemini quota (shared across modules)
+
+The Gemini free tier allows about **20 requests per day per model**, and that
+budget is **shared by Modules 4, 5 and 8** (they use the same `GEMINI_MODEL`).
+The insight report retries only temporary Gemini failures: up to 3 attempts
+inside one call (429/5xx), and at most 3 learner-triggered retries per session.
+So the worst case for one session's report is about 12 calls. That is bounded
+on purpose, but a few unlucky sessions on a bad Gemini day could use up
+quota that Module 4's simplifications also need. Keep this in mind before
+lowering or raising any of these limits.
 
 ### Cross-cutting fixes (not tied to one milestone issue)
 

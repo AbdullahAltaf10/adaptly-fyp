@@ -129,3 +129,43 @@ describe("privacy copy", () => {
     ).toBeTruthy();
   });
 });
+
+describe("the document this session is about", () => {
+  it("blocks Start while the document is still loading", () => {
+    // Otherwise a learner who chose a document and hit Start quickly gets a
+    // session with nothing to read.
+    setup({}, { document: { loading: true, error: null } });
+    expect(startButton().disabled).toBe(true);
+    expect(screen.getByText(/loading your document/i)).toBeTruthy();
+  });
+
+  it("blocks Start and says why when the document could not be opened", () => {
+    // The error used to sit behind this dialog where nobody could see it, and
+    // Start stayed enabled - so a learner who picked a document that no longer
+    // existed started a session with nothing to read and no explanation.
+    setup({}, { document: { loading: false, error: "Content not found" } });
+    expect(startButton().disabled).toBe(true);
+    expect(screen.getByRole("alert").textContent).toMatch(/could not be opened/i);
+    expect(screen.getByRole("link", { name: /choose another document/i }).getAttribute("href")).toBe(
+      "/library"
+    );
+  });
+
+  it("lets a camera-only session start, with no document to wait for", () => {
+    setup({}, { document: undefined });
+    expect(startButton().disabled).toBe(false);
+  });
+
+  it("lets Start through once the document has loaded", () => {
+    setup({}, { document: { loading: false, error: null } });
+    expect(startButton().disabled).toBe(false);
+  });
+
+  it("still blocks on a missing camera even when the document is fine", () => {
+    setup(
+      { camera: CAMERA_DENIED, cameraReady: false, brightness: null, lowLight: null },
+      { document: { loading: false, error: null } }
+    );
+    expect(startButton().disabled).toBe(true);
+  });
+});

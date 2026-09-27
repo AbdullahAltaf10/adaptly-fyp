@@ -155,6 +155,9 @@ class AssistantContext(AssistantModel):
     learner_preferences: LearnerPreferences | None = None
     conversation: list[ConversationMessage]
     emotion_signal: EmotionSignal = "neutral"
+    # Filled in by the server from Module 3's own record of the session, never
+    # from the request body. See app/engagement/latest_state.py.
+    engagement_state: str | None = None
 
 
 class AssistantMessageResponse(AssistantModel):

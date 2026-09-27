@@ -25,8 +25,17 @@ const NAV = [
   { to: "/library", label: "My documents" },
   { to: "/study", label: "Study session" },
   { to: "/analytics", label: "Analytics" },
-  { to: "/compliance", label: "Compliance report" },
 ];
+
+/**
+ * Shown only to corporate accounts. Scope 6.10 makes the attestation report a
+ * corporate feature: an individual learner studying their own PDF has no
+ * compliance context, so offering them the page puts a corporate concept in
+ * front of the wrong user group. The page itself still works for whoever opens
+ * it directly, and the backend is owner-only regardless - this is about not
+ * advertising it.
+ */
+const CORPORATE_NAV = [{ to: "/compliance", label: "Compliance report" }];
 
 /** Shown only to HR admins; the backend enforces the same rule. */
 const HR_NAV = [{ to: "/hr/compliance", label: "HR compliance" }];
@@ -99,7 +108,11 @@ export default function AppShell() {
           </Link>
 
           <nav aria-label="Main" className="flex gap-1">
-            {[...NAV, ...(profile?.corporate_role === "hr_admin" ? HR_NAV : [])].map((item) => (
+            {[
+              ...NAV,
+              ...(profile?.mode === "corporate" ? CORPORATE_NAV : []),
+              ...(profile?.corporate_role === "hr_admin" ? HR_NAV : []),
+            ].map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

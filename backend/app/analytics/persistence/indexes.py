@@ -70,3 +70,6 @@ def ensure_indexes(database: Any) -> None:
 
     learning_profiles = database[collections.LEARNING_PROFILES]
     learning_profiles.create_index("user_id", unique=True, name="uniq_user_id")
+
+    insight_reports = database[collections.INSIGHT_REPORTS]
+    insight_reports.create_index("session_id", unique=True, name="uniq_session_id")

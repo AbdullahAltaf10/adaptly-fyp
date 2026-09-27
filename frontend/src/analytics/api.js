@@ -103,3 +103,23 @@ export function fetchSessionAnalytics(sessionId) {
       throw error;
     });
 }
+
+/**
+ * Ask the backend to write (or retry) this session's insight report.
+ *
+ * `POST /api/sessions/{id}/insight-report/retry` is the ONLY thing that
+ * generates one. The reply says what happened: `retried: false` with a
+ * `message` when the server declined - a report already exists, Gemini is not
+ * configured, or the retry budget is spent - which is worth showing rather than
+ * swallowing.
+ *
+ * Its own timeout, because generation can legitimately take a while: a Gemini
+ * call with up to three attempts and backoff runs well past the shared client's
+ * 20 seconds, and cutting it off would report a failure for a report the server
+ * then finishes writing.
+ */
+export function requestInsightReport(sessionId) {
+  return api
+    .post(`/api/sessions/${sessionId}/insight-report/retry`, null, { timeout: 90_000 })
+    .then((response) => response.data);
+}

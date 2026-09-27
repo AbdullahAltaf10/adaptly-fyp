@@ -42,6 +42,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.analytics.persistence.field_allowlists import INTERVENTION_EVENT_FIELDS  # noqa: E402
 from app.auth.dependencies import get_current_user  # noqa: E402
+from app.intervention.policy import POLICY_VERSION  # noqa: E402
 from app.engagement import furrow, routes as engagement_routes  # noqa: E402
 from app.intervention import content, contracts, cooldown, service, store  # noqa: E402
 from app.intervention.decider import (  # noqa: E402
@@ -414,7 +415,7 @@ def test_an_offered_intervention_is_stored_before_it_is_returned(fake_store):
     assert result["intervention"] is not None
     stored = store.get(result["intervention"]["intervention_id"])
     assert stored["delivery_status"] == "offered"
-    assert stored["policy_version"] == "v1-tiered"
+    assert stored["policy_version"] == POLICY_VERSION
 
 
 def test_nothing_is_offered_if_it_could_not_be_stored(fake_store):
