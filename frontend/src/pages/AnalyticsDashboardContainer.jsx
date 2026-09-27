@@ -12,9 +12,13 @@
  * setup in the test.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { fetchMostRecentCompletedSession, fetchSessionAnalytics } from "../analytics/api";
+import {
+  fetchMostRecentCompletedSession,
+  fetchSessionAnalytics,
+  requestInsightReport,
+} from "../analytics/api";
 import EmptyAnalyticsState from "../analytics/EmptyAnalyticsState";
 import ErrorState from "../analytics/ErrorState";
 import LoadingState from "../analytics/LoadingState";
@@ -23,6 +27,7 @@ import AnalyticsDashboard from "./AnalyticsDashboard";
 export default function AnalyticsDashboardContainer({
   fetchRecentSession = fetchMostRecentCompletedSession,
   fetchAnalytics = fetchSessionAnalytics,
+  requestReport = requestInsightReport,
 }) {
   const [state, setState] = useState({ status: "loading", session: null, error: null });
 
@@ -48,6 +53,25 @@ export default function AnalyticsDashboardContainer({
     };
   }, [fetchRecentSession]);
 
+  // What InsightReport calls to have this session's summary written. Kept here
+  // because this is the component that knows the session id and how to refetch.
+  const sessionId = state.session?.session_id;
+  const generateInsightReport = useCallback(async () => {
+    let outcome = null;
+    try {
+      outcome = await requestReport(sessionId);
+    } catch {
+      // A failed request still leaves whatever report already exists worth
+      // showing, so fall through to the refetch rather than losing it.
+    }
+    const data = await fetchAnalytics(sessionId);
+    return {
+      insightReport: data.insightReport,
+      retried: outcome?.retried,
+      message: outcome?.message ?? null,
+    };
+  }, [requestReport, fetchAnalytics, sessionId]);
+
   if (state.status === "loading" || state.status === "error" || state.status === "empty") {
     return (
       <main aria-labelledby="analytics-dashboard-heading">
@@ -63,6 +87,7 @@ export default function AnalyticsDashboardContainer({
     <AnalyticsDashboard
       session={{ sessionId: state.session.session_id, status: "completed" }}
       fetchAnalytics={fetchAnalytics}
+      generateInsightReport={generateInsightReport}
     />
   );
 }

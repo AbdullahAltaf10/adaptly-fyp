@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../api/client", () => ({
-  default: { get: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn() },
 }));
 
 import api from "../api/client";
@@ -9,7 +9,21 @@ import {
   fetchMostRecentCompletedSession,
   fetchSessionAnalytics,
   fetchSessionHistory,
+  requestInsightReport,
 } from "./api";
+
+describe("requestInsightReport", () => {
+  it("posts to the retry endpoint with a long timeout and returns the body", async () => {
+    api.post.mockResolvedValueOnce({ data: { retried: true, message: null } });
+
+    const out = await requestInsightReport("s-1");
+
+    expect(api.post).toHaveBeenCalledWith("/api/sessions/s-1/insight-report/retry", null, {
+      timeout: 90_000,
+    });
+    expect(out).toEqual({ retried: true, message: null });
+  });
+});
 
 describe("fetchSessionHistory", () => {
   it("calls the real session-history endpoint with default paging", async () => {
