@@ -78,6 +78,14 @@ DEFAULT_DWELL_SHORT = 15.0
 # where comprehension matters most"). Also provisional.
 CRITICAL_DWELL_FACTOR = 0.5
 
+# How much a learner saying they are confused or frustrated lowers both gates
+# (scope 6.5). Less than a critical section on purpose. A tagged section is a
+# standing fact about the material, decided in advance by someone who knows it;
+# a sentence typed in the middle of a session is strong but momentary evidence,
+# and the learner may well have worked it out while typing. Provisional, like
+# the gates themselves, and to be tuned against real sessions.
+EXPRESSED_DIFFICULTY_DWELL_FACTOR = 0.7
+
 
 class DefaultPolicy:
     """
@@ -105,8 +113,23 @@ class DefaultPolicy:
         self.critical_factor = critical_factor
 
     def gates_for(self, signals: Signals) -> tuple[float, float]:
-        """Dwell gates for this chunk, lowered when HR has marked it critical."""
+        """Dwell gates for this chunk.
+
+        Lowered when HR has marked the section critical (scope 6.9), and
+        lowered again when the learner has recently told the assistant they
+        are confused or frustrated (scope 6.5, "passed to the central AI layer
+        as high-priority signals").
+
+        Lowering the gate is the whole of that priority. A learner's words are
+        strong evidence that they are struggling, but they say nothing about
+        WHICH paragraph or WHEN, so they shorten how long the system waits
+        before offering help rather than triggering help by themselves. The two
+        factors multiply: someone who says they are lost on a critical section
+        is the case where waiting is least defensible.
+        """
         factor = self.critical_factor if signals.is_critical else 1.0
+        if signals.expressed_difficulty:
+            factor *= EXPRESSED_DIFFICULTY_DWELL_FACTOR
         return self.dwell_long * factor, self.dwell_short * factor
 
     @staticmethod
