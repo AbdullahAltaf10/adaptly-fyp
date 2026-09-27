@@ -66,8 +66,12 @@ export function validateName(value) {
  * dropdown would be offering something the server will refuse — a worse
  * experience than not showing it.
  */
+// Values match the backend's own VALID_MODES (app/auth/roles.py) exactly.
+// This used to say "individual" here, which the backend has never accepted -
+// every registration with the learner option selected, including the
+// default, failed with 400 "mode must be one of: corporate, learner".
 export const REGISTRATION_MODES = [
-  { value: "individual", label: "Individual learner", hint: "Studying on your own" },
+  { value: "learner", label: "Individual learner", hint: "Studying on your own" },
   { value: "corporate", label: "Corporate employee", hint: "Assigned training from an employer" },
 ];
 

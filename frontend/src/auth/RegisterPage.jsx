@@ -48,15 +48,22 @@ export default function RegisterPage() {
   const [email, setEmail] = useState(currentUser?.email ?? "");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
-  const [mode, setMode] = useState("individual");
+  const [mode, setMode] = useState("learner");
 
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const createProfile = async (chosenMode) => {
-    // `mode` is a query parameter on this endpoint, not a body field.
-    await api.post(`/users/register?mode=${encodeURIComponent(chosenMode)}`);
+    // `mode` and `role` are query parameters on this endpoint, not body fields.
+    // The backend requires `role` whenever mode is "corporate" - self-registration
+    // can only ever produce "employee" (`hr_admin` needs a bootstrap allow-list and
+    // is not offered here), so it is never something for this form to ask about.
+    // Omitting it was a second bug: every corporate signup 400'd on "role must be
+    // one of: employee when mode is corporate", never on the mode name itself.
+    const params = new URLSearchParams({ mode: chosenMode });
+    if (chosenMode === "corporate") params.set("role", "employee");
+    await api.post(`/users/register?${params.toString()}`);
   };
 
   const handleSubmit = async (event) => {
