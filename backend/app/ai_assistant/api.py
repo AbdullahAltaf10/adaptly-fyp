@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.ai_assistant.analytics_contracts import build_assistant_events
 from app.ai_assistant.analytics_sink import record_assistant_exchange
+from app.engagement import latest_state
 from app.ai_assistant.schemas import AssistantMessageRequest, AssistantMessageResponse
 from app.ai_assistant import service
 from app.auth.dependencies import get_current_user
@@ -43,7 +44,12 @@ def create_assistant_message(
     # model_name on a failed exchange is honest (we don't have it here), not
     # a bug to silently work around.
     try:
-        response, model_name = service.create_assistant_response(request)
+        response, model_name = service.create_assistant_response(
+            request,
+            # Read on the server, keyed on the caller's own uid, so it can
+            # neither be forged by the request nor leak between learners.
+            engagement_state=latest_state.get(user["uid"], request.session_id),
+        )
     except service.AssistantConfigurationError as error:
         _record_exchange_safely(
             request,

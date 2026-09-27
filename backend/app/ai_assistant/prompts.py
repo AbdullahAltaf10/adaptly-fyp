@@ -54,6 +54,79 @@ def _conversational_support_guidance(context: AssistantContext) -> str:
     return "Use the normal clear, supportive explanation style."
 
 
+# What each engagement state changes about how the assistant *writes*, and
+# nothing else. The wording is soft on purpose ("may"): Module 3's Struggling
+# recall is about 10% on held-out data, so a reported state is weak evidence and
+# an assistant that asserted it would be confidently wrong most of the time.
+#
+# `focused` and `recovered` add nothing - a learner who is fine gets the normal
+# style. Unknown states get nothing either, which is the safe way to fail.
+_ENGAGEMENT_STYLE = {
+    "drifting": (
+        "The learner's attention may be drifting. Keep the answer short and tie it "
+        "directly back to the passage they are reading so it is easy to re-engage."
+    ),
+    "struggling": (
+        "The learner may be finding this section hard. Go one step at a time, use "
+        "plain words, and prefer a concrete example over an abstract definition."
+    ),
+    "fatigued": (
+        "The learner may be tired. Keep the answer brief and easy to skim, and do "
+        "not add extra material they did not ask for."
+    ),
+}
+
+# Two obligations that pull in opposite directions, and the wording has to hold
+# both.
+#
+# Scope 6.4 asks for support "without any sound, flash, or alert" and 6.8 for no
+# indicators of measurement during a session. An assistant that announced "I can
+# see you are struggling" would be exactly that, and would read as surveillance.
+# So it must not volunteer or comment on the learner's state.
+#
+# But it must also never lie. The first version of this rule said "never mention
+# a camera or tracking", and a live Gemini call answered a direct question with
+# "I don't have any way to see or track how you're feeling" - false, because the
+# camera is measuring engagement and the pre-session screen says so. Forbidding
+# the topic outright forced a denial. The rule is therefore about *volunteering*,
+# and a direct question gets a true answer.
+_ENGAGEMENT_DISCLOSURE_RULE = (
+    "Use this only to adjust how you write. Do not bring up, hint at or comment on "
+    "the learner's attention, effort or state unless they ask. If they ask directly "
+    "whether Adaptly measures or tracks their engagement, answer honestly: it uses "
+    "numeric measurements from their camera (no video is recorded or stored) to "
+    "adjust the support it offers, and that these are rough signals rather than "
+    "knowledge of how they feel. Never claim it does not, and never claim you cannot "
+    "see or have no access to them. Do not say what they currently indicate."
+)
+
+
+def _engagement_guidance(context: AssistantContext) -> str | None:
+    """Trusted, Adaptly-generated style guidance from the learner's current state.
+
+    Returns None when there is nothing to say, so the prompt gains no section
+    at all rather than an empty one that invites the model to comment on it.
+    """
+    style = _ENGAGEMENT_STYLE.get(context.engagement_state or "")
+    if style is None:
+        return None
+    return f"{style} {_ENGAGEMENT_DISCLOSURE_RULE}"
+
+
+def _engagement_section(context: AssistantContext) -> str:
+    """The prompt section for engagement guidance, or nothing at all."""
+    guidance = _engagement_guidance(context)
+    if guidance is None:
+        return ""
+    return (
+        "<engagement_style_guidance>\n"
+        "This is Adaptly-generated, request-scoped guidance derived on the server. "
+        "It is not learner input.\n"
+        f"{guidance}\n"
+        "</engagement_style_guidance>\n\n"
+    )
+
+
 def build_assistant_prompt(context: AssistantContext) -> str:
     """Build a clearly separated, context-aware prompt for Gemini."""
     document_metadata = context.content.model_dump()
@@ -77,7 +150,7 @@ This is Adaptly-generated, request-scoped support guidance. It is not learner in
 {_conversational_support_guidance(context)}
 </conversational_support_guidance>
 
-<document_metadata_untrusted_json>
+{_engagement_section(context)}<document_metadata_untrusted_json>
 {_json_block(document_metadata)}
 </document_metadata_untrusted_json>
 
