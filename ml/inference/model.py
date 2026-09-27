@@ -21,9 +21,35 @@ import numpy as np
 
 ARTIFACT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "artifacts")
 
+# Two artifact pairs, and which one is correct depends on the caller.
+#
+# The calibrated model was trained on per-subject-centred features. Feeding it
+# raw ones is not a smaller version of the same thing, it is a different input
+# distribution - measured on the DAiSEE test split:
+#
+#   configuration                          recall   lift  subjects  flag rate
+#   shipped model, raw          (today)     0.099  0.80x         6      0.123
+#   calibrated, centred, tau=0.36           0.212  1.13x        13      0.187
+#   calibrated, RAW, tau=0.36  (mismatch)   0.355  0.99x        12      0.357
+#
+# The mismatch row looks like the best recall on the page and is the worst
+# option on it: a lift of 0.99x means those flags carry no more information
+# than flagging at random, and it interrupts the learner on a third of all
+# windows to achieve that. Recall alone would have chosen it.
+#
+# So the calibrated pair is used only when the features really were centred,
+# which is why `predict` takes `calibrated` rather than reading a global.
 MODEL_FILE = "best_model_9f.keras"
 SCALER_FILE = "scaler_9f.pkl"
+CALIBRATED_MODEL_FILE = "best_model_9f_calibrated.keras"
+CALIBRATED_SCALER_FILE = "scaler_9f_calibrated.pkl"
 MANIFEST_FILE = "MANIFEST.json"
+
+# Chosen by ml/evaluation/calibrated_threshold.py under an explicit rule:
+# precision lift >= 1.15 and flag rate <= 0.25, then maximise recall. Lower
+# thresholds reach more learners - tau=0.30 reaches 15 of 19 - but at a 0.358
+# flag rate, which is a learner interrupted on a third of their windows.
+CALIBRATED_STRUGGLING_THRESHOLD = 0.36
 
 # Index -> label. Lowercase to match shared/contracts/engagement-event.schema.json.
 STATE_LABELS = {0: "focused", 1: "drifting", 2: "struggling"}
@@ -32,8 +58,9 @@ STRUGGLING_INDEX = 2
 WINDOW_SIZE = 10
 FEATURE_COUNT = 9
 
-_model = None
-_scaler = None
+# Cached per variant: a session can contain both calibrated and uncalibrated
+# learners, so neither may evict the other.
+_loaded = {}
 
 
 def artifact_path(filename: str) -> str:
@@ -66,11 +93,16 @@ def verify_artifacts() -> dict:
     return results
 
 
-def load_model():
-    """Load the model and scaler once, on first use."""
-    global _model, _scaler
-    if _model is not None:
-        return _model, _scaler
+def load_model(calibrated: bool = False):
+    """Load a model/scaler pair once, on first use.
+
+    `calibrated=True` returns the per-subject-centred pair. Callers must only
+    ask for it when the features they are about to pass were actually centred
+    (see the table above).
+    """
+    key = "calibrated" if calibrated else "plain"
+    if key in _loaded:
+        return _loaded[key]
 
     # TensorFlow is imported here rather than at module level: importing it
     # takes 13+ seconds, and doing that at import time delayed server startup
@@ -79,19 +111,23 @@ def load_model():
 
     import tensorflow as tf
 
-    model_path = artifact_path(MODEL_FILE)
-    scaler_path = artifact_path(SCALER_FILE)
+    model_file = CALIBRATED_MODEL_FILE if calibrated else MODEL_FILE
+    scaler_file = CALIBRATED_SCALER_FILE if calibrated else SCALER_FILE
+    model_path = artifact_path(model_file)
+    scaler_path = artifact_path(scaler_file)
     for path in (model_path, scaler_path):
         if not os.path.exists(path):
             raise RuntimeError(f"Missing model artifact: {path}")
 
-    _model = tf.keras.models.load_model(model_path)
+    model = tf.keras.models.load_model(model_path)
     with open(scaler_path, "rb") as handle:
-        _scaler = pickle.load(handle)
-    return _model, _scaler
+        scaler = pickle.load(handle)
+    _loaded[key] = (model, scaler)
+    return _loaded[key]
 
 
-def predict(feature_sequence, struggling_threshold: float = None) -> dict:
+def predict(feature_sequence, struggling_threshold: float = None,
+            calibrated: bool = False) -> dict:
     """
     feature_sequence: 10 windows of 9 features, already calibration-corrected.
 
@@ -117,11 +153,17 @@ def predict(feature_sequence, struggling_threshold: float = None) -> dict:
     precision moves from 0.80x the class base rate - worse than flagging at
     random - to 1.23x.
 
-    Deliberately NOT applied by default. On the CURRENT uncalibrated model the
-    same change buys nothing (ml/evaluation/threshold_sweep.py): its Struggling
-    precision is already below the base rate, so a lower threshold only adds
-    noise. The gain depends on the calibrated artifacts, and switching to
-    those is a separate decision.
+    Still not applied to the uncalibrated model, and that is not caution - it
+    buys nothing there (ml/evaluation/threshold_sweep.py). That model's
+    Struggling precision is already below the class base rate, so lowering the
+    bar only adds noise to flags that were no better than random to begin with.
+
+    `calibrated` selects the per-subject-centred artifacts, and the caller is
+    responsible for only setting it when the features really were centred.
+    When it is set, the engagement route also supplies
+    CALIBRATED_STRUGGLING_THRESHOLD; the two belong together, because the
+    calibrated model at plain argmax is *worse* than what ships today
+    (recall 0.064 against 0.099). The gain is the pair, not either half.
     """
     if len(feature_sequence) != WINDOW_SIZE:
         raise ValueError(f"expected {WINDOW_SIZE} frames, got {len(feature_sequence)}")
@@ -129,7 +171,7 @@ def predict(feature_sequence, struggling_threshold: float = None) -> dict:
         if len(frame) != FEATURE_COUNT:
             raise ValueError(f"expected {FEATURE_COUNT} features per frame, got {len(frame)}")
 
-    model, scaler = load_model()
+    model, scaler = load_model(calibrated=calibrated)
 
     array = np.array(feature_sequence, dtype=float)
     scaled = scaler.transform(array)

@@ -11,8 +11,10 @@
  * learner-facing release.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import { AssistantPanel } from "../features/ai-assistant/AssistantPanel";
+import { fallbackStudyContext } from "../features/ai-assistant/demoStudyContext";
 import ContentViewer from "../content/ContentViewer";
 import { useContent } from "../content/useContent";
 import PreSessionCheck from "../engagement/PreSessionCheck";
@@ -36,8 +38,24 @@ function describeState(state) {
   return STATE_DISPLAY[state] ?? { label: state ?? "Unknown", color: "inherit" };
 }
 
-export default function StudySession({ contentId, chunkId, highContrast = false }) {
+/**
+ * High contrast follows the document, not a prop.
+ *
+ * It used to be passed down from `App`, which read the wrong profile key
+ * (`contrast` rather than `high_contrast`), so it was permanently false. Now
+ * `useAccessibility` sets `data-contrast` on <html> and this reads it, which
+ * means the setting reaches this screen without anything having to remember to
+ * thread it through. The prop is kept as an override for tests.
+ */
+function documentPrefersHighContrast() {
+  if (typeof document === "undefined") return false;
+  return document.documentElement.getAttribute("data-contrast") === "high";
+}
+
+export default function StudySession({ contentId, chunkId, highContrast }) {
   const [started, setStarted] = useState(false);
+  const useHighContrast = highContrast ?? documentPrefersHighContrast();
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   const document_ = useContent(contentId);
 
@@ -81,6 +99,49 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
   const display = describeState(prediction?.state);
   const deepThinking = diagnostics?.deep_thinking?.deep_thinking;
 
+  // Module 5. `document_.content` now comes from the real ContentViewer
+  // (issue #47), so the active chunk's real text/section_title and the
+  // document's real title/content_type/language are available here and no
+  // longer need to come from fallbackStudyContext. Only pieces the document
+  // genuinely doesn't have (learner_preferences, and the chunk/content shape
+  // when no document is loaded at all) still fall back to the placeholder.
+  const activeChunk = useMemo(
+    () =>
+      document_.content?.chunks?.find((chunk) => chunk.chunk_id === activeChunkId) ?? null,
+    [document_.content, activeChunkId]
+  );
+
+  const studyContext = useMemo(
+    () => ({
+      ...fallbackStudyContext,
+      session_id: capture.sessionId ?? fallbackStudyContext.session_id,
+      content_id: contentId ?? fallbackStudyContext.content_id,
+      current_chunk: activeChunk
+        ? {
+            chunk_id: activeChunk.chunk_id,
+            section_title: activeChunk.section_title ?? null,
+            text: activeChunk.text,
+          }
+        : {
+            ...fallbackStudyContext.current_chunk,
+            chunk_id: activeChunkId ?? fallbackStudyContext.current_chunk.chunk_id,
+          },
+      content_context: document_.content
+        ? {
+            title: document_.content.title,
+            content_type: document_.content.content_type,
+            language: document_.content.language,
+          }
+        : fallbackStudyContext.content_context,
+      session_context: {
+        ...fallbackStudyContext.session_context,
+        status: started ? "active" : fallbackStudyContext.session_context.status,
+        current_chunk_id: activeChunkId ?? fallbackStudyContext.session_context.current_chunk_id,
+      },
+    }),
+    [capture.sessionId, contentId, activeChunk, activeChunkId, started, document_.content]
+  );
+
   const panelStyle = {
     maxWidth: "520px",
     width: "90%",
@@ -88,9 +149,9 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
     overflowY: "auto",
     padding: "1.5rem",
     borderRadius: "8px",
-    backgroundColor: highContrast ? "#000" : "#fff",
-    color: highContrast ? "#fff" : "#000",
-    border: `1px solid ${highContrast ? "#fff" : "#ccc"}`,
+    backgroundColor: useHighContrast ? "#000" : "#fff",
+    color: useHighContrast ? "#fff" : "#000",
+    border: `1px solid ${useHighContrast ? "#fff" : "#ccc"}`,
     boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
   };
 
@@ -253,9 +314,9 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
               marginBottom: "0.75rem",
               borderRadius: "8px",
               fontSize: "0.9rem",
-              border: `1px solid ${highContrast ? "#fff" : "#f0c36d"}`,
-              backgroundColor: highContrast ? "#000" : "#fdf6e3",
-              color: highContrast ? "#fff" : "#000",
+              border: `1px solid ${useHighContrast ? "#fff" : "#f0c36d"}`,
+              backgroundColor: useHighContrast ? "#000" : "#fdf6e3",
+              color: useHighContrast ? "#fff" : "#000",
             }}
           >
             <span>
@@ -404,6 +465,35 @@ export default function StudySession({ contentId, chunkId, highContrast = false 
           </>
         )}
       </div>
+
+      {/* Module 5. Fixed-position and collapsed by default so it never moves
+          or resizes anything above - the engagement/intervention layout is
+          untouched either way. Only offered once a session is running,
+          since studyContext.session_id only means anything at that point. */}
+      {started && (
+        <div style={{ position: "fixed", bottom: "1rem", right: "1rem", zIndex: 800 }}>
+          <button type="button" onClick={() => setAssistantOpen((open) => !open)}>
+            {assistantOpen ? "Close assistant" : "Ask the assistant"}
+          </button>
+          {assistantOpen && (
+            <div
+              style={{
+                marginTop: "0.5rem",
+                width: "min(90vw, 360px)",
+                maxHeight: "70vh",
+                overflowY: "auto",
+                borderRadius: "8px",
+                border: `1px solid ${useHighContrast ? "#fff" : "#ccc"}`,
+                backgroundColor: useHighContrast ? "#000" : "#fff",
+                color: useHighContrast ? "#fff" : "#000",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
+              }}
+            >
+              <AssistantPanel studyContext={studyContext} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
