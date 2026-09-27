@@ -134,3 +134,43 @@ button:not([class]):disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * Sentence-level focus isolation, driven by `data-focus-isolation="on"` on
+ * <html> (scope objective 4.1). The attribute is written by
+ * `useAccessibility`; `ContentViewer` splits each paragraph into sentences so
+ * there is something to isolate.
+ *
+ * Dimmed, never hidden. `opacity` rather than `display: none` or
+ * `visibility: hidden` means the rest of the paragraph stays readable,
+ * selectable, and in the accessibility tree - a learner who looks up, uses a
+ * screen reader, or copies a passage loses nothing. Hiding text would make an
+ * accessibility setting destructive.
+ *
+ * The rules only apply under the attribute, so a learner who has not asked for
+ * this never pays for it.
+ */
+:root[data-focus-isolation="on"] .focus-sentence {
+  transition: opacity 120ms ease-in-out;
+}
+
+:root[data-focus-isolation="on"] .focus-sentence-dimmed {
+  /*
+   * 0.35 keeps the shape of the surrounding text visible so the learner can
+   * still see where they are in the paragraph. Below about 0.3 the text stops
+   * being legible at all, which turns "isolation" into "hiding".
+   */
+  opacity: 0.35;
+}
+
+/*
+ * High contrast exists because a learner needs maximum separation, so fading
+ * text is working against them. Dim far less, and lean on weight instead.
+ */
+:root[data-focus-isolation="on"][data-contrast="high"] .focus-sentence-dimmed {
+  opacity: 0.7;
+}
+
+:root[data-focus-isolation="on"][data-contrast="high"] .focus-sentence:not(.focus-sentence-dimmed) {
+  font-weight: 600;
+}
