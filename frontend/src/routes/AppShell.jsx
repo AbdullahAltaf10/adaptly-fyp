@@ -25,6 +25,7 @@ const NAV = [
   { to: "/library", label: "My documents" },
   { to: "/study", label: "Study session" },
   { to: "/analytics", label: "Analytics" },
+  { to: "/progress", label: "Your progress" },
 ];
 
 /**

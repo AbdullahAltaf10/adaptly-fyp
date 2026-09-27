@@ -10,7 +10,7 @@
  * Route shape:
  *
  *   /signin  /register  /verify-email  /forgot-password    signed out
- *   /library /library/new /study /analytics /settings      signed in
+ *   /library /library/new /study /analytics /progress /settings   signed in
  *   /compliance                                            signed in, corporate
  *   /hr/compliance                                         signed in, hr_admin
  *
@@ -35,6 +35,7 @@ import VerifyEmailPage from "./auth/VerifyEmailPage";
 import AppShell from "./routes/AppShell";
 import RequireAuth from "./routes/RequireAuth";
 import AnalyticsDashboardContainer from "./pages/AnalyticsDashboardContainer";
+import ProgressPage from "./pages/ProgressPage";
 import ComplianceReportPage from "./pages/ComplianceReportPage";
 import HrComplianceReportsPage from "./pages/HrComplianceReportsPage";
 import LibraryPage from "./content/LibraryPage";
@@ -122,6 +123,7 @@ export default function App() {
           <Route path="/library/new" element={<UploadPage />} />
           <Route path="/study" element={<StudyRoute />} />
           <Route path="/analytics" element={<AnalyticsDashboardContainer />} />
+          <Route path="/progress" element={<ProgressPage />} />
           <Route path="/compliance" element={<ComplianceReportPage />} />
           <Route
             path="/hr/compliance"
