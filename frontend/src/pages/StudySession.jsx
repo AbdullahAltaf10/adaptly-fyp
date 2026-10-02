@@ -11,7 +11,9 @@
  * learner-facing release.
  */
 
-import { useMemo, useState } from "react";
+import { AlertTriangle, Bot, Camera, CheckCircle2, CircleDashed, X } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { AssistantPanel } from "../features/ai-assistant/AssistantPanel";
 import { fallbackStudyContext } from "../features/ai-assistant/demoStudyContext";
@@ -22,39 +24,38 @@ import { useEngagementCapture } from "../engagement/useEngagementCapture";
 import { useFacePresence } from "../engagement/useFacePresence";
 import { usePreSessionCheck } from "../engagement/usePreSessionCheck";
 import InterventionHost from "../intervention/InterventionHost";
-import { useDwell } from "../intervention/useDwell";
+import ParagraphPopup from "../intervention/ParagraphPopup";
+import { needsGeneratedText } from "../intervention/constants";
+import { useDwellFusion } from "../intervention/useDwellFusion";
 import { useIntervention } from "../intervention/useIntervention";
+import { useParagraphPopup } from "../intervention/useParagraphPopup";
+import { Button } from "../ui";
 
-/** How a reported state is labelled and coloured. */
+/**
+ * How a reported state is labelled - developer diagnostics only.
+ *
+ * Scope 6.8: "No statistics, scores, or indicators are shown during an active
+ * session." This state label is exactly that indicator, so it lives inside
+ * the collapsed Diagnostics disclosure below, never in the learner's own
+ * view. It used to also render unconditionally in the main flow, in colour,
+ * which was the scope violation this redesign removes.
+ */
 const STATE_DISPLAY = {
-  focused: { label: "Focused", color: "#137333" },
-  drifting: { label: "Drifting", color: "#8a6d00" },
-  struggling: { label: "Struggling", color: "#b3261e" },
-  fatigued: { label: "Fatigued", color: "#c46a00" },
-  recovered: { label: "Recovered", color: "#137333" },
+  focused: { label: "Focused" },
+  drifting: { label: "Drifting" },
+  struggling: { label: "Struggling" },
+  fatigued: { label: "Fatigued" },
+  recovered: { label: "Recovered" },
 };
 
 function describeState(state) {
-  return STATE_DISPLAY[state] ?? { label: state ?? "Unknown", color: "inherit" };
+  return STATE_DISPLAY[state] ?? { label: state ?? "Unknown" };
 }
 
-/**
- * High contrast follows the document, not a prop.
- *
- * It used to be passed down from `App`, which read the wrong profile key
- * (`contrast` rather than `high_contrast`), so it was permanently false. Now
- * `useAccessibility` sets `data-contrast` on <html> and this reads it, which
- * means the setting reaches this screen without anything having to remember to
- * thread it through. The prop is kept as an override for tests.
- */
-function documentPrefersHighContrast() {
-  if (typeof document === "undefined") return false;
-  return document.documentElement.getAttribute("data-contrast") === "high";
-}
-
-export default function StudySession({ contentId, chunkId, highContrast }) {
+export default function StudySession({ contentId, chunkId }) {
+  const navigate = useNavigate();
   const [started, setStarted] = useState(false);
-  const useHighContrast = highContrast ?? documentPrefersHighContrast();
+  const [ending, setEnding] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
 
   const document_ = useContent(contentId);
@@ -68,19 +69,85 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
   // read are both real numbers now. Before this, nothing registered, dwell
   // stayed 0, and `simplify_content` and `bullet_summary` could never be
   // offered however long someone stared at a hard paragraph.
-  const dwell = useDwell({ enabled: started });
+  // `capture` (below) needs `dwell.chunkId`/`dwell.seconds`, and dwell fusion
+  // needs `capture.getLatestLandmarks` for its gaze-quadrant signal - each
+  // hook needs the other's result. Resolved with a stable ref bridge: the
+  // getter's identity never changes (so the fusion interval below is never
+  // torn down and recreated on a render), but it always reads whatever
+  // `capture` most recently was.
+  const captureRef = useRef(null);
+  const getLatestLandmarksBridge = useCallback(
+    () => captureRef.current?.getLatestLandmarks?.() ?? null,
+    []
+  );
+  const dwell = useDwellFusion({ enabled: started, getLatestLandmarks: getLatestLandmarksBridge });
+
+  // useDwellFusion's internal element map is not exposed, so ParagraphPopup
+  // (which needs the actual DOM element for the intervention's own chunk_id
+  // to anchor to) is served from this small parallel map instead, populated
+  // through the same onChunkRef callback ContentViewer already calls for
+  // every chunk.
+  const chunkElementsRef = useRef(new Map()); // chunk_id -> DOM element
+  // Depends on dwell.register specifically, not the whole `dwell` object:
+  // useDwellFusion returns a fresh object literal every render (see its own
+  // comment on the analogous issue for its internal `register`), so
+  // depending on it directly would give this callback a new identity every
+  // render - which would give ContentChunk's ref callback a new identity too
+  // (it depends on onChunkRef), causing React to unregister and re-register
+  // every chunk on every render and never let useDwell's IntersectionObserver
+  // report a stable visibility ratio. dwell.register itself is stable.
+  const registerChunkElement = useCallback((chunkId, element) => {
+    dwell.register(chunkId, element);
+    if (element) {
+      chunkElementsRef.current.set(chunkId, element);
+    } else {
+      chunkElementsRef.current.delete(chunkId);
+    }
+  }, [dwell.register]);
 
   // The chunk the learner is actually on beats whatever was passed in. The
   // prop stays as the fallback for a session with no document (the camera-only
   // path this page started as), and so the caller can pin a chunk in a test.
-  const activeChunkId = dwell.chunkId ?? chunkId;
+  //
+  // `dwell.activeChunkId` is the render-time VALUE (used below to find the
+  // paragraph for the assistant). `dwell.chunkId` is a GETTER, handed to the
+  // capture loop so each window carries the chunk it was captured on. This
+  // line used to read `dwell.chunkId ?? chunkId`, which is the getter itself -
+  // always truthy - so `activeChunkId` was a function, no window ever carried
+  // a chunk id, and everything keyed on one (the passage an intervention
+  // rewrites, the critical-section flag, per-chunk analytics) silently got
+  // nothing. The tests hid it because they mock this hook without a chunkId.
+  const activeChunkId = dwell.activeChunkId ?? chunkId;
 
   const capture = useEngagementCapture({
     active: started,
     contentId,
-    chunkId: activeChunkId,
+    chunkId,
+    getChunkId: dwell.chunkId,
     getDwellSeconds: dwell.seconds,
   });
+  captureRef.current = capture;
+
+  // Until this existed, a session only ended when the whole page unmounted -
+  // navigating away, or closing the tab (the `pagehide` handler inside
+  // useEngagementCapture covers that second case; before it, that lost the
+  // session's analytics entirely). Awaiting the real call before navigating
+  // means the learner lands on their analytics after the backend has actually
+  // finalized the session, not while it is still in flight.
+  const endSession = async () => {
+    setEnding(true);
+    try {
+      await capture.endSessionNow();
+    } catch {
+      // Best effort - finalization is failure-safe on the backend regardless,
+      // and staying on this screen forever over a network blip would be
+      // worse than moving on and letting the learner check back later.
+    } finally {
+      setStarted(false);
+      navigate(`/analytics?session=${encodeURIComponent(capture.sessionId)}`);
+    }
+  };
+
   const presence = useFacePresence({
     faceDetected: capture.faceDetected,
     enabled: started && capture.ready,
@@ -93,6 +160,20 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
     intervention: capture.prediction?.intervention ?? null,
     sessionId: capture.sessionId,
   });
+
+  const popup = useParagraphPopup({ intervention, activeChunkId: dwell.activeChunkId });
+
+  // What the sticky AssistantPanel is seeded with when the learner clicks
+  // "Continue in chat" on the popup - the panel appends this once (gated on
+  // its own id, see AssistantPanel.jsx) and further questions continue
+  // there, in the same persistent history the popup's own content was
+  // already written to (source="popup", Task 4).
+  const [assistantSeedTurn, setAssistantSeedTurn] = useState(null);
+  const continueInChat = () => {
+    if (!popup.current || !popup.content?.generated) return;
+    setAssistantSeedTurn({ id: popup.current.intervention_id, content: popup.content.generated });
+    setAssistantOpen(true);
+  };
 
   const { prediction } = capture;
   const diagnostics = prediction?.diagnostics ?? null;
@@ -142,48 +223,12 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
     [capture.sessionId, contentId, activeChunk, activeChunkId, started, document_.content]
   );
 
-  const panelStyle = {
-    maxWidth: "520px",
-    width: "90%",
-    maxHeight: "85vh",
-    overflowY: "auto",
-    padding: "1.5rem",
-    borderRadius: "8px",
-    backgroundColor: useHighContrast ? "#000" : "#fff",
-    color: useHighContrast ? "#fff" : "#000",
-    border: `1px solid ${useHighContrast ? "#fff" : "#ccc"}`,
-    boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
-  };
-
-  const centeredColumn = {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    textAlign: "center",
-    maxWidth: "760px",
-    margin: "0 auto",
-  };
 
   // Enlarging the camera view must not move the <video> element in the React
   // tree: remounting it drops srcObject and the picture goes black.
-  const videoWrap = presence.faceLost
-    ? {
-        position: "fixed",
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
-        zIndex: 950,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-      }
-    : {
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        marginBottom: "0.75rem",
-      };
+  const videoWrapClass = presence.faceLost
+    ? "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[950] flex flex-col items-center"
+    : "relative flex flex-col items-center mb-3";
 
   return (
     <div>
@@ -194,6 +239,22 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
         @keyframes adaptly-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
       `}</style>
 
+      {/* Always visible once a session is running - the one control this
+          screen was missing entirely. Fixed at the top so it is reachable
+          without scrolling past the video or the document, and it is the
+          only reliable way a learner ends a session on purpose: without it,
+          the session only ever closed by leaving the page, and a learner who
+          simply left their tab open never generated an analytics summary,
+          an insight report, or (for a corporate account) a compliance report
+          at all - finalization only ever runs at session end. */}
+      {started && (
+        <div className="sticky top-0 z-[850] flex justify-end px-4 py-2 bg-surface/95 backdrop-blur-sm border-b border-line">
+          <Button variant="secondary" busy={ending} busyLabel="Ending session..." onClick={endSession}>
+            End session
+          </Button>
+        </div>
+      )}
+
       {/* The session's own camera is not requested until this is dismissed.
           The check below opens a short-lived probe stream of its own and stops
           it again, so the two never share a stream. */}
@@ -203,69 +264,37 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
           warnings={document_.content?.warnings ?? []}
           document={contentId ? { loading: document_.loading, error: document_.error } : undefined}
           onStart={() => setStarted(true)}
-          panelStyle={panelStyle}
         />
       )}
 
       {/* Dim everything behind the enlarged view so the instruction is
           unmissable while the learner is out of frame. */}
-      {presence.faceLost && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.6)",
-            zIndex: 900,
-          }}
-        />
-      )}
+      {presence.faceLost && <div className="fixed inset-0 z-[900] bg-black/60" />}
 
-      <div style={centeredColumn}>
-        <div style={videoWrap}>
+      <div className="flex flex-col items-center text-center max-w-[760px] mx-auto px-4">
+        <div className={videoWrapClass}>
           <video
             ref={capture.videoRef}
             autoPlay
             playsInline
             muted
-            style={{
-              width: presence.faceLost ? "min(86vw, 640px)" : "min(90vw, 400px)",
-              borderRadius: "12px",
-              display: started ? "block" : "none",
-              border: `3px solid ${presence.faceLost ? "#f5a524" : "transparent"}`,
-              transition: "width .25s ease, border-color .25s ease",
-              transform: "scaleX(-1)", // mirrored, so moving left feels like left
-            }}
+            className={`rounded-xl border-[3px] transition-[width,border-color] duration-200 ease-out ${
+              started ? "block" : "hidden"
+            } ${presence.faceLost ? "w-[min(86vw,640px)] border-warning" : "w-[min(90vw,400px)] border-transparent"}`}
+            style={{ transform: "scaleX(-1)" }} // mirrored, so moving left feels like left
           />
 
           {presence.faceLost && (
-            <div style={{ marginTop: "0.75rem", color: "#fff" }}>
-              <p
-                style={{
-                  fontSize: "1.15rem",
-                  margin: 0,
-                  animation: "adaptly-pulse 1.4s ease-in-out infinite",
-                }}
-              >
+            <div className="mt-3 text-white">
+              <p className="text-lg m-0 animate-[adaptly-pulse_1.4s_ease-in-out_infinite]">
                 Move back into the frame
               </p>
-              <p style={{ fontSize: "0.9rem", opacity: 0.8, marginTop: "0.35rem" }}>
-                Centre your face in the view above
-              </p>
+              <p className="text-sm opacity-80 mt-1.5 m-0">Centre your face in the view above</p>
             </div>
           )}
 
           {presence.showTick && (
-            <div
-              aria-live="polite"
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                pointerEvents: "none",
-              }}
-            >
+            <div aria-live="polite" className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <svg
                 viewBox="0 0 52 52"
                 width="110"
@@ -277,7 +306,7 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
                   cy="26"
                   r="24"
                   fill="none"
-                  stroke="#22c55e"
+                  stroke="var(--color-success)"
                   strokeWidth="3"
                   style={{
                     strokeDasharray: 151,
@@ -288,7 +317,7 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
                 <path
                   d="M14 27 l8 8 l16 -16"
                   fill="none"
-                  stroke="#22c55e"
+                  stroke="var(--color-success)"
                   strokeWidth="4"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -304,195 +333,189 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
         </div>
 
         {presence.suggestRecalibrate && !presence.faceLost && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexWrap: "wrap",
-              gap: "0.4rem",
-              padding: "0.6rem 0.9rem",
-              marginBottom: "0.75rem",
-              borderRadius: "8px",
-              fontSize: "0.9rem",
-              border: `1px solid ${useHighContrast ? "#fff" : "#f0c36d"}`,
-              backgroundColor: useHighContrast ? "#000" : "#fdf6e3",
-              color: useHighContrast ? "#fff" : "#000",
-            }}
-          >
-            <span>
-              You were away for a moment. If you moved or changed seat,
-              recalibrate.
+          <div className="flex items-center justify-center flex-wrap gap-2 px-3 py-2 mb-3 rounded-md
+                          border border-warning/40 bg-warning-soft text-ink text-sm">
+            <span className="flex items-center gap-1.5">
+              <AlertTriangle size={14} strokeWidth={1.75} className="text-warning shrink-0" aria-hidden="true" />
+              You were away for a moment. If you moved or changed seat, recalibrate.
             </span>
-            <span style={{ whiteSpace: "nowrap" }}>
-              <button
+            <span className="flex gap-2 whitespace-nowrap">
+              <Button
+                variant="secondary"
                 onClick={capture.runCalibration}
                 disabled={!capture.ready || capture.calibrating}
               >
                 Recalibrate
-              </button>
-              <button
-                onClick={presence.dismissRecalibrate}
-                style={{ marginLeft: "0.4rem" }}
-              >
+              </Button>
+              <Button variant="quiet" onClick={presence.dismissRecalibrate}>
                 Dismiss
-              </button>
+              </Button>
             </span>
           </div>
         )}
 
-        <p style={{ margin: "0.25rem 0" }}>{capture.status}</p>
-        <p style={{ margin: "0.25rem 0" }}>
-          Face detected: {capture.faceDetected ? "Yes" : "No"} · Frames:{" "}
-          {capture.framesCollected} / {capture.windowSize}
-        </p>
-        {capture.lightingWarning && (
-          <p style={{ color: "orange", margin: "0.25rem 0" }}>
-            {capture.lightingWarning}
-          </p>
-        )}
-
-        <div style={{ margin: "0.5rem 0" }}>
-          <button
-            onClick={capture.runCalibration}
-            disabled={!capture.ready || capture.calibrating}
-          >
-            {capture.calibrating
-              ? "Calibrating..."
-              : capture.calibrated
-              ? "Recalibrate"
-              : "Calibrate now"}
-          </button>
-          {capture.calibrating && (
-            <span style={{ marginLeft: "0.75rem" }}>
-              Look naturally at the screen...
-            </span>
+        <div className="w-full max-w-[620px] rounded-card border border-line bg-surface shadow-card p-4 mb-4 text-left">
+          <div className="flex items-center gap-2 text-sm text-ink">
+            <Camera size={16} strokeWidth={1.75} className="text-muted shrink-0" aria-hidden="true" />
+            {capture.status}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted mt-1">
+            {capture.faceDetected ? (
+              <CheckCircle2 size={14} strokeWidth={1.75} className="text-success shrink-0" aria-hidden="true" />
+            ) : (
+              <CircleDashed size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+            )}
+            Face detected: {capture.faceDetected ? "Yes" : "No"} · Frames: {capture.framesCollected} /{" "}
+            {capture.windowSize}
+          </div>
+          {capture.lightingWarning && (
+            <p className="flex items-center gap-1.5 text-warning text-xs mt-2 mb-0">
+              <AlertTriangle size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+              {capture.lightingWarning}
+            </p>
           )}
-          {capture.calibrated && !capture.calibrating && (
-            <span style={{ marginLeft: "0.75rem", color: "green" }}>Calibrated</span>
-          )}
-        </div>
-        {capture.calibrationError && (
-          <p style={{ color: "red" }}>
-            Calibration failed: {capture.calibrationError}
-          </p>
-        )}
 
-        {/* Two waits happen before a state can appear: the window filling at
-            one frame per second, and the first prediction, which loads
-            TensorFlow. The backend warms the model on startup, so the second is
-            usually over before anyone reaches this screen. */}
-        {started && !prediction && (
-          <div style={{ margin: "0.75rem 0", minHeight: "3.5rem" }}>
-            <p style={{ fontSize: "1.1rem", margin: "0.25rem 0", color: "#666" }}>
-              <strong>
+          <div className="flex items-center gap-2 mt-3">
+            <Button
+              variant="secondary"
+              onClick={capture.runCalibration}
+              disabled={!capture.ready || capture.calibrating}
+            >
+              {capture.calibrating ? "Calibrating..." : capture.calibrated ? "Recalibrate" : "Calibrate now"}
+            </Button>
+            {capture.calibrating && <span className="text-xs text-muted">Look naturally at the screen...</span>}
+            {capture.calibrated && !capture.calibrating && (
+              <span className="flex items-center gap-1 text-xs text-success font-medium">
+                <CheckCircle2 size={14} strokeWidth={1.75} aria-hidden="true" />
+                Calibrated
+              </span>
+            )}
+          </div>
+          {capture.calibrationError && (
+            <p className="text-danger text-xs mt-2 mb-0">Calibration failed: {capture.calibrationError}</p>
+          )}
+
+          {/* Two waits happen before a state can appear: the window filling at
+              one frame per second, and the first prediction, which loads
+              TensorFlow. The backend warms the model on startup, so the second is
+              usually over before anyone reaches this screen. */}
+          {started && !prediction && (
+            <div className="mt-3 min-h-14">
+              <p className="text-sm text-muted m-0 font-medium">
                 {capture.framesCollected < capture.windowSize
                   ? `Getting ready — ${capture.windowSize - capture.framesCollected}s`
                   : "Analysing your first reading..."}
-              </strong>
-            </p>
-            <div
-              style={{
-                height: "4px",
-                width: "260px",
-                margin: "0.6rem auto 0",
-                background: "#e0e0e0",
-                borderRadius: "2px",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${Math.min(100, (capture.framesCollected / capture.windowSize) * 100)}%`,
-                  background: "#0b6bcb",
-                  transition: "width .4s ease",
-                }}
-              />
+              </p>
+              <div className="h-1 w-full max-w-64 mt-2 bg-page rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-[width] duration-300 ease-out"
+                  style={{ width: `${Math.min(100, (capture.framesCollected / capture.windowSize) * 100)}%` }}
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Scope 6.8: no state, score or confidence is shown to the
+              learner during a session. This lives behind the collapsed
+              Diagnostics disclosure only. */}
+          {prediction && diagnostics && (
+            <Diagnostics
+              diagnostics={diagnostics}
+              dropped={capture.droppedWindows}
+              state={display.label}
+              confidence={prediction.confidence}
+              deepThinking={deepThinking}
+            />
+          )}
+        </div>
 
         {/* What the learner is here to read. Above the support, so an offer
             appears under the text it is about rather than pushing it down. */}
         {contentId && (
-          <div style={{ width: "100%", maxWidth: "620px", textAlign: "left" }}>
-            {document_.loading && <p>Loading the document...</p>}
-            {document_.error && (
-              <p style={{ color: "#b3261e" }}>{document_.error}</p>
-            )}
+          <div className="w-full max-w-[620px] text-left">
+            {document_.loading && <p className="text-muted">Loading the document...</p>}
+            {document_.error && <p className="text-danger">{document_.error}</p>}
             {document_.content && (
               <ContentViewer
                 content={document_.content}
-                onChunkRef={dwell.register}
+                onChunkRef={registerChunkElement}
+                activeChunkId={dwell.activeChunkId}
+                fusionConfidence={dwell.fusionConfidence}
               />
             )}
           </div>
         )}
 
-        {/* Module 4's support, inline and quiet. Scope 6.4 asks for this
-            "without any sound, flash, or alert", so it sits in the normal
-            flow of the page rather than over it. */}
-        <div style={{ width: "100%", maxWidth: "620px" }}>
-          <InterventionHost
-            intervention={intervention.current}
-            content={intervention.content}
-            loading={intervention.loading}
-            accepted={intervention.accepted}
-            onAccept={intervention.accept}
-            onComplete={intervention.complete}
-            onDismiss={intervention.dismiss}
-          />
-        </div>
-
-        {prediction && (
-          <>
-            <p style={{ fontSize: "1.1rem", margin: "0.5rem 0" }}>
-              <strong style={{ color: display.color }}>{display.label}</strong>{" "}
-              <span style={{ color: "#666", fontSize: "0.85rem" }}>
-                ({(prediction.confidence * 100).toFixed(1)}%)
-              </span>
-              {deepThinking && (
-                <span style={{ color: "#0b6bcb", fontSize: "0.85rem" }}>
-                  {" "}
-                  — reflecting
-                </span>
-              )}
-            </p>
-
-            {diagnostics && (
-              <Diagnostics diagnostics={diagnostics} dropped={capture.droppedWindows} />
-            )}
-          </>
+        {/* Module 4's support. simplify_content/bullet_summary are
+            paragraph-anchored (ParagraphPopup, beside the paragraph they are
+            about); break_suggestion/assistant_help_prompt are not, and keep
+            the original bottom-of-page, inline-and-quiet card. Scope 6.4
+            asks for this "without any sound, flash, or alert" either way. */}
+        {intervention.current && !needsGeneratedText(intervention.current.intervention_type) && (
+          <div className="w-full max-w-[620px]">
+            <InterventionHost
+              intervention={intervention.current}
+              content={intervention.content}
+              loading={intervention.loading}
+              accepted={intervention.accepted}
+              onAccept={intervention.accept}
+              onComplete={intervention.complete}
+              onDismiss={intervention.dismiss}
+            />
+          </div>
         )}
+
+        <ParagraphPopup
+          chunkElement={popup.current ? chunkElementsRef.current.get(popup.current.chunk_id) : null}
+          intervention={popup.current}
+          content={popup.content}
+          collapsed={popup.collapsed}
+          onToggleCollapsed={popup.toggleCollapsed}
+          onComplete={popup.complete}
+          onDismiss={popup.dismiss}
+          onContinueInChat={continueInChat}
+        />
       </div>
 
-      {/* Module 5. Fixed-position and collapsed by default so it never moves
-          or resizes anything above - the engagement/intervention layout is
-          untouched either way. Only offered once a session is running,
-          since studyContext.session_id only means anything at that point. */}
+      {/* Module 5, as a sticky floating widget - the same idea as a
+          "chat with an assistant" bubble that stays anchored to the corner of
+          the screen through everything else happening on the page (Coursera's
+          own AI panel is the reference point). Fixed-position and collapsed
+          by default so it never moves or resizes anything above - the
+          engagement/intervention layout is untouched either way. Only offered
+          once a session is running, since studyContext.session_id only means
+          anything at that point.
+          The launcher button IS the close button once open (one control, two
+          jobs) rather than a separate X inside the panel - one less thing to
+          find, and it is where the eye already is. */}
       {started && (
-        <div style={{ position: "fixed", bottom: "1rem", right: "1rem", zIndex: 800 }}>
-          <button type="button" onClick={() => setAssistantOpen((open) => !open)}>
-            {assistantOpen ? "Close assistant" : "Ask the assistant"}
-          </button>
+        <div className="fixed bottom-4 right-4 z-[800] flex flex-col items-end gap-3">
           {assistantOpen && (
             <div
-              style={{
-                marginTop: "0.5rem",
-                width: "min(90vw, 360px)",
-                maxHeight: "70vh",
-                overflowY: "auto",
-                borderRadius: "8px",
-                border: `1px solid ${useHighContrast ? "#fff" : "#ccc"}`,
-                backgroundColor: useHighContrast ? "#000" : "#fff",
-                color: useHighContrast ? "#fff" : "#000",
-                boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
-              }}
+              className="w-[min(90vw,380px)] h-[min(70vh,32rem)] rounded-card shadow-floating
+                         border border-line bg-surface overflow-hidden origin-bottom-right
+                         animate-[adaptly-pop_var(--duration-base)_var(--ease-standard)_both]"
             >
-              <AssistantPanel studyContext={studyContext} />
+              <AssistantPanel studyContext={studyContext} seedTurn={assistantSeedTurn} />
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => setAssistantOpen((open) => !open)}
+            aria-expanded={assistantOpen}
+            className="inline-flex items-center justify-center w-14 h-14 rounded-full
+                       bg-accent text-on-accent shadow-floating hover:bg-accent-hover
+                       transition-colors duration-150"
+          >
+            {assistantOpen ? (
+              <X size={22} strokeWidth={1.75} aria-hidden="true" />
+            ) : (
+              <Bot size={24} strokeWidth={1.75} aria-hidden="true" />
+            )}
+            <span className="sr-only">
+              {assistantOpen ? "Close assistant" : "Ask the assistant"}
+            </span>
+          </button>
         </div>
       )}
     </div>
@@ -507,7 +530,7 @@ export default function StudySession({ contentId, chunkId, highContrast }) {
  * distribution behind them, and knowing which condition blocks it is the
  * difference between measuring a threshold and guessing at it again.
  */
-function Diagnostics({ diagnostics, dropped }) {
+function Diagnostics({ diagnostics, dropped, state, confidence, deepThinking }) {
   const {
     smoothing,
     fatigue,
@@ -532,6 +555,13 @@ function Diagnostics({ diagnostics, dropped }) {
     <details style={{ marginTop: "0.5rem", fontSize: "0.85rem", overflowX: "auto" }}>
       <summary style={{ cursor: "pointer", color: "#666" }}>Diagnostics</summary>
       <div style={mono}>
+        {/* Scope 6.8 forbids showing this to the learner - it lives here,
+            behind the collapsed disclosure above, and nowhere else. */}
+        <div>
+          reported state: {state} ({(confidence * 100).toFixed(1)}%)
+          {deepThinking && " — reflecting"}
+        </div>
+
         {smoothing && (
           <div>
             raw: {smoothing.raw_state} —{" "}

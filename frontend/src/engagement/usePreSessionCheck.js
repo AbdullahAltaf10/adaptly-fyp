@@ -27,9 +27,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { averageBrightness, isLowLight } from "./landmarks";
+import { calibrateWebgazer, stopWebgazer } from "./webgazerSignal";
 
 /** Enough frames for auto-exposure to settle; a first frame reads far too dark. */
 const SETTLE_MS = 900;
+
+/** How many fusionConfidence samples the readability probe collects before judging. */
+const READABILITY_PROBE_SECONDS = 8;
+/** Below this average confidence, the signals never settled on a clear target. */
+const SCATTERED_CONFIDENCE_THRESHOLD = 0.3;
 
 export const CAMERA_UNKNOWN = "unknown";
 export const CAMERA_OK = "ok";
@@ -51,7 +57,41 @@ export function usePreSessionCheck({ enabled = true } = {}) {
   const [attempt, setAttempt] = useState(0);
   const videoRef = useRef(null);
 
+  const [webgazerStatus, setWebgazerStatus] = useState("idle");
+  const [readabilitySuggestion, setReadabilitySuggestion] = useState(null);
+  const confidenceSamplesRef = useRef([]);
+
   const recheck = useCallback(() => setAttempt((n) => n + 1), []);
+
+  const startWebgazerCalibration = useCallback(async () => {
+    setWebgazerStatus("calibrating");
+    const result = await calibrateWebgazer();
+    setWebgazerStatus(result.available ? "ready" : "unavailable");
+  }, []);
+
+  const skipWebgazerCalibration = useCallback(() => {
+    setWebgazerStatus("unavailable");
+  }, []);
+
+  /**
+   * Called by the study page once per fusion tick during the readability
+   * probe window, with the current fusionConfidence. After
+   * READABILITY_PROBE_SECONDS samples, a low average suggests a suggestion.
+   */
+  const recordReadabilitySample = useCallback((confidence) => {
+    confidenceSamplesRef.current.push(confidence);
+    if (confidenceSamplesRef.current.length < READABILITY_PROBE_SECONDS) return;
+    const average =
+      confidenceSamplesRef.current.reduce((a, b) => a + b, 0) / confidenceSamplesRef.current.length;
+    if (average < SCATTERED_CONFIDENCE_THRESHOLD) {
+      setReadabilitySuggestion({ fontUp: true, lineSpacingUp: true });
+    }
+    confidenceSamplesRef.current = [];
+  }, []);
+
+  const dismissReadabilitySuggestion = useCallback(() => setReadabilitySuggestion(null), []);
+
+  useEffect(() => () => stopWebgazer(), []);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -117,5 +157,11 @@ export function usePreSessionCheck({ enabled = true } = {}) {
     // reported as its own state rather than collapsed into either.
     lowLight: brightness === null ? null : isLowLight(brightness),
     recheck,
+    webgazerStatus,
+    startWebgazerCalibration,
+    skipWebgazerCalibration,
+    readabilitySuggestion,
+    recordReadabilitySample,
+    dismissReadabilitySuggestion,
   };
 }

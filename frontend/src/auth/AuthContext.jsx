@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import api, { classifyError } from "../api/client";
+import { getDeviceId } from "./deviceId";
+import { deviceTrustStatus, twoFactorEnabled as fetchTwoFactorEnabled } from "./security";
 
 const AuthContext = createContext(null);
 
@@ -19,6 +21,30 @@ export function AuthProvider({ children }) {
   const [profileError, setProfileError] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Whether device-trust 2FA can run at all (Gmail configured on the
+  // backend) versus whether THIS browser is trusted for THIS account. The
+  // first is a feature flag - RequireAuth must never gate navigation behind
+  // a code that can never arrive because nobody filled in GMAIL_ADDRESS yet.
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [deviceTrusted, setDeviceTrusted] = useState(null);
+
+  const refreshDeviceTrust = async () => {
+    if (!auth.currentUser) return;
+    try {
+      setDeviceTrusted(await deviceTrustStatus(getDeviceId()));
+    } catch {
+      // Unreachable backend is handled by the profile fetch's own retry loop;
+      // failing this quietly just means the gate stays closed until the next
+      // check succeeds, not that navigation breaks.
+    }
+  };
+
+  useEffect(() => {
+    fetchTwoFactorEnabled()
+      .then(setTwoFactorEnabled)
+      .catch(() => setTwoFactorEnabled(false));
+  }, []);
+
   const fetchProfile = async (user) => {
     if (!user) return;
     setProfileError(null);
@@ -28,6 +54,7 @@ export function AuthProvider({ children }) {
         const res = await api.get("/users/me");
         setProfile(res.data);
         setProfileError(null);
+        refreshDeviceTrust();
         return;
       } catch (err) {
         const kind = classifyError(err);
@@ -71,6 +98,7 @@ export function AuthProvider({ children }) {
       } else {
         setProfile(null);
         setProfileError(null);
+        setDeviceTrusted(null);
       }
       setLoading(false);
     });
@@ -83,7 +111,16 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const value = { currentUser, profile, profileError, loading, refreshProfile };
+  const value = {
+    currentUser,
+    profile,
+    profileError,
+    loading,
+    refreshProfile,
+    twoFactorEnabled,
+    deviceTrusted,
+    refreshDeviceTrust,
+  };
 
   return (
     <AuthContext.Provider value={value}>

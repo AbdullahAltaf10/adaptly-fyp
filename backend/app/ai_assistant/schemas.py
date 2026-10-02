@@ -117,6 +117,10 @@ class AssistantMessageRequest(AssistantModel):
     # question - see Issue #34's analytics_contracts.py). Optional so this
     # isn't a breaking change to existing callers.
     input_mode: InputMode = "typed"
+    # Where this question originated - the sticky panel, or the anchored
+    # paragraph popup's own inline follow-up composer. Additive; existing
+    # callers that never send it default to "panel", today's only source.
+    source: Literal["panel", "popup"] = "panel"
 
     @field_validator("question", "session_id", "content_id", mode="before")
     @classmethod
@@ -160,6 +164,19 @@ class AssistantContext(AssistantModel):
     engagement_state: str | None = None
 
 
+class SuggestionsRequest(AssistantModel):
+    """The paragraph on screen. Nothing else is needed to suggest questions."""
+
+    current_chunk: CurrentChunk
+
+
+class SuggestionsResponse(AssistantModel):
+    suggested_questions: Annotated[
+        list[Annotated[str, Field(min_length=1, max_length=MAX_SUGGESTED_QUESTION_LENGTH)]],
+        Field(min_length=SUGGESTED_QUESTION_COUNT, max_length=SUGGESTED_QUESTION_COUNT),
+    ]
+
+
 class AssistantMessageResponse(AssistantModel):
     """Stable Issue #17 response returned by the deterministic mock service."""
 
@@ -174,3 +191,22 @@ class AssistantMessageResponse(AssistantModel):
     session_id: str
     content_id: str
     chunk_id: str
+
+
+MAX_HISTORY_LIMIT = 100
+
+
+class HistoryMessage(AssistantModel):
+    id: str
+    role: Literal["user", "assistant"]
+    content: str
+    source: Literal["panel", "popup"]
+    trigger: str | None = None
+    content_id: str | None = None
+    chunk_id: str | None = None
+    session_id: str | None = None
+    timestamp: float
+
+
+class HistoryResponse(AssistantModel):
+    messages: list[HistoryMessage]

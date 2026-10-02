@@ -1,40 +1,104 @@
 @import "tailwindcss";
 
 /*
- * The whole palette, in one @theme block.
+ * Adaptly's design system, in one file.
  *
- * Tailwind v4 turns every entry here into both a CSS variable and a utility
- * class, so `--color-accent` gives `bg-accent`, `text-accent`, `border-accent`
- * and the rest. That is the point: the look changes by editing this block, not
- * by hunting through components for hex codes.
+ * Tailwind v4 turns every `@theme` entry into both a CSS variable and a
+ * utility class, so `--color-accent` gives `bg-accent`, `text-accent`,
+ * `border-accent` and the rest. That is the point: the look changes by
+ * editing this file, not by hunting through components for hex codes.
  *
- * Deliberately plain — scaffolding for a real design, not the design.
+ * DESIGN PRINCIPLES (read before adding a colour, a shadow, or an animation)
+ * ---------------------------------------------------------------------
+ * The learner on the other side of every one of these pages may be autistic,
+ * have ADHD, or have a reading difficulty. Scope section 4 requires "no
+ * alerts, no scores, and no labels shown during an active session" and says
+ * neurodiverse learners "respond significantly better to infrequent targeted
+ * support delivered without visual disruption than to frequent generic
+ * alerts". That is a design constraint, not just a Module 4 one:
+ *
+ *   - No colour is loud enough to read as an alarm on its own. `--color-
+ *     danger` is a muted clay, not a fire-engine red - errors need to be
+ *     found, not flinched at.
+ *   - One accent colour, used sparingly. Competing bright colours are the
+ *     visual-clutter equivalent of the "frequent generic alerts" scope 4
+ *     warns against.
+ *   - Motion is short and settles quickly (`--duration-*`, `--ease-standard`)
+ *     and is fully suppressed under `prefers-reduced-motion` below. Nothing
+ *     bounces, pulses forever, or draws the eye on its own.
+ *   - Generous, consistent spacing (`--space-*`) over dense layouts. Visual
+ *     clutter is a real cognitive-load cost for ADHD and autistic users, not
+ *     just an aesthetic preference.
+ *   - Icons (lucide-react) are always the thin, line-weight style - never
+ *     filled/bold - for the same reason: something that draws attention
+ *     harder than its neighbours is a small alarm.
  */
 @theme {
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  --color-page: #f6f7f9;
+  /* Warm, soft neutrals rather than clinical grey-on-white. Pure white next
+     to pure black text is more glare than some ADHD/autistic readers find
+     comfortable for long reading; this keeps normal-mode contrast high
+     without that glare. High-contrast mode below still goes to true
+     black/white, because that mode's whole purpose is maximum separation. */
+  --color-page: #faf9f6;
   --color-surface: #ffffff;
 
-  --color-ink: #1a1c1e;
+  --color-ink: #23262b;
   --color-muted: #5f6368;
   --color-inverse: #ffffff;
 
-  --color-line: #d6d9dd;
-  --color-line-strong: #9aa0a6;
+  --color-line: #dedad2;
+  --color-line-strong: #9a9488;
 
-  --color-accent: #1a56db;
-  --color-accent-hover: #1445b0;
+  /* A calm, deep teal rather than a saturated "corporate" blue. Teal reads as
+     steady and focused rather than urgent, which is the tone every one of
+     these screens wants - including the ones with no crisis in them at all. */
+  --color-accent: #2b6777;
+  --color-accent-hover: #1f4d59;
   --color-on-accent: #ffffff;
 
-  --color-danger: #b3261e;
-  --color-danger-soft: #fdecea;
-  --color-success: #137333;
+  /* Muted clay, not alarm-red. It still passes as "clearly a problem" next to
+     ink and to success/warning - it just does not spike anxiety to do it. */
+  --color-danger: #a8442f;
+  --color-danger-soft: #fbeee9;
+  --color-success: #2f7a4d;
   --color-success-soft: #e8f5ec;
   --color-warning: #8a6d00;
   --color-warning-soft: #fff8e1;
-  --color-info: #0b6bcb;
-  --color-info-soft: #e8f1fb;
+  --color-info: #2b6777;
+  --color-info-soft: #e7f0ef;
+
+  /* Radius and shadow as theme tokens too (Tailwind v4's own namespaces), so
+     `rounded-card`/`shadow-card` stay in one place to tune, the same as the
+     colours above. Shadows are soft and short-spread - a "resting on the
+     page" cue, not a hover-state spotlight effect. */
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgba(35, 38, 43, 0.04), 0 4px 16px rgba(35, 38, 43, 0.06);
+  --shadow-floating: 0 8px 28px rgba(35, 38, 43, 0.16);
+}
+
+/*
+ * Plain CSS custom properties (not `@theme`) for the one thing Tailwind's own
+ * scale does not cover: named values for `style={{ ... }}` on components with
+ * bespoke motion (the floating assistant widget's open/close transition,
+ * for instance), where a `className` utility does not reach.
+ *
+ * `:root`, not `@theme`, on purpose - putting a value here does NOT generate a
+ * Tailwind utility class. Reach for a real one first: `duration-150`,
+ * `ease-out`, `p-4` and friends already exist and do everything Tailwind's own
+ * spacing/font-size scale needs, without anything added here duplicating them
+ * under a different name that looks like it should work as a class and does
+ * not.
+ */
+:root {
+  /* Short and settled. Scope section 4's "no flash" rule extends to
+     everything, not only Module 4's own interventions - a page transition
+     that lingers or overshoots is its own small alert. */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /*

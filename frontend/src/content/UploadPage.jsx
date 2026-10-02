@@ -27,6 +27,7 @@
  * `uploadValidation.js`.
  */
 
+import { FileText, Globe, NotepadText, PlayCircle, Video } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -64,6 +65,7 @@ const METHODS = [
   {
     id: "pdf",
     label: "PDF",
+    icon: FileText,
     kind: "file",
     accept: ".pdf,application/pdf",
     validate: validatePdfFile,
@@ -74,6 +76,7 @@ const METHODS = [
   {
     id: "research",
     label: "Research paper",
+    icon: FileText,
     kind: "file",
     accept: ".pdf,application/pdf",
     validate: validatePdfFile,
@@ -84,12 +87,14 @@ const METHODS = [
   {
     id: "text",
     label: "Paste text",
+    icon: NotepadText,
     kind: "text",
     wait: "Immediate.",
   },
   {
     id: "web",
     label: "Web page",
+    icon: Globe,
     kind: "url",
     validate: validateWebUrl,
     submit: addFromUrl,
@@ -100,6 +105,7 @@ const METHODS = [
   {
     id: "youtube",
     label: "YouTube",
+    icon: PlayCircle,
     kind: "url",
     validate: validateYoutubeUrl,
     submit: addFromYoutube,
@@ -110,6 +116,7 @@ const METHODS = [
   {
     id: "video",
     label: "Video file",
+    icon: Video,
     kind: "file",
     accept: "video/*,.mp4,.mov,.m4v,.webm,.mkv,.avi",
     validate: validateVideoFile,
@@ -128,7 +135,11 @@ export default function UploadPage() {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
 
-  const [errors, setErrors] = useState({});
+  // Which fields have reached a point where a problem is worth mentioning.
+  // A file is different from a typed field here: picking one already IS the
+  // decision (there is no "still deciding" moment the way there is mid-word
+  // in a text box), so a file counts as touched the instant one is chosen.
+  const [touched, setTouched] = useState({});
   const [failure, setFailure] = useState(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
@@ -136,8 +147,24 @@ export default function UploadPage() {
 
   const controllerRef = useRef(null);
 
+  // Recomputed every render from the live values - the same reason as
+  // RegisterPage's: showing a problem immediately, and clearing it the moment
+  // it stops being true, without an effect chasing the values around. This is
+  // what makes "wrong file" or "URL doesn't look right" appear before the
+  // upload starts, not after a wait ending in a form the learner has to redo.
+  const liveErrors =
+    method.kind === "file"
+      ? collectFieldErrors({ file: method.validate(file) })
+      : method.kind === "url"
+      ? collectFieldErrors({ url: method.validate(url) })
+      : collectFieldErrors({ title: validateTitle(title), text: validatePastedText(text) });
+  const errors = Object.fromEntries(
+    Object.entries(liveErrors).filter(([field]) => touched[field])
+  );
+  const touchField = (field) => setTouched((prev) => ({ ...prev, [field]: true }));
+
   const reset = () => {
-    setErrors({});
+    setTouched({});
     setFailure(null);
     setResult(null);
     setProgress(null);
@@ -155,16 +182,12 @@ export default function UploadPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    reset();
+    setFailure(null);
 
-    const found =
-      method.kind === "file"
-        ? collectFieldErrors({ file: method.validate(file) })
-        : method.kind === "url"
-        ? collectFieldErrors({ url: method.validate(url) })
-        : collectFieldErrors({ title: validateTitle(title), text: validatePastedText(text) });
-    setErrors(found);
-    if (Object.keys(found).length > 0) return;
+    // Reveal every remaining problem at once on submit - unchanged from
+    // before. Live validation only changes *when* a message can first appear.
+    setTouched({ file: true, url: true, title: true, text: true });
+    if (Object.keys(liveErrors).length > 0) return;
 
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -199,7 +222,11 @@ export default function UploadPage() {
       <Link to="/library" className="text-sm text-accent hover:underline">
         &larr; Back to my documents
       </Link>
-      <h1 className="mt-2 mb-4 text-2xl font-semibold">Add a document</h1>
+      <h1 className="mt-1 mb-1 text-2xl font-semibold">Add a document</h1>
+      <p className="mt-0 mb-4 text-sm text-muted">
+        A PDF, a research paper, pasted text, a website address, a YouTube video, or a video file
+        - pick whichever fits what you have.
+      </p>
 
       <div role="tablist" aria-label="How to add a document" className="flex flex-wrap gap-1 mb-4">
         {METHODS.map((m) => (
@@ -213,13 +240,15 @@ export default function UploadPage() {
             disabled={busy && m.id !== methodId}
             onClick={() => switchMethod(m.id)}
             className={[
-              "px-3 py-2 rounded-md border text-sm font-medium min-h-10",
+              "inline-flex items-center gap-1.5 px-3 py-2 rounded-md border text-sm font-medium min-h-10",
+              "transition-colors duration-150",
               m.id === methodId
                 ? "bg-accent text-on-accent border-accent"
                 : "bg-surface text-ink border-line hover:bg-page",
               "disabled:opacity-50 disabled:cursor-not-allowed",
             ].join(" ")}
           >
+            <m.icon size={15} strokeWidth={1.75} aria-hidden="true" />
             {m.label}
           </button>
         ))}
@@ -244,7 +273,10 @@ export default function UploadPage() {
                       // Reset on switch so a stale file from another tab cannot
                       // be submitted to this one.
                       key={method.id}
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                      onChange={(e) => {
+                        setFile(e.target.files?.[0] ?? null);
+                        touchField("file");
+                      }}
                       className="block w-full text-sm file:mr-3 file:px-3 file:py-2 file:rounded-md file:border file:border-line file:bg-surface file:text-ink"
                     />
                   )}
@@ -264,6 +296,7 @@ export default function UploadPage() {
                       disabled={busy}
                       invalid={Boolean(errors.url)}
                       onChange={(e) => setUrl(e.target.value)}
+                      onBlur={() => touchField("url")}
                     />
                   )}
                 </Field>
@@ -280,6 +313,7 @@ export default function UploadPage() {
                         disabled={busy}
                         invalid={Boolean(errors.title)}
                         onChange={(e) => setTitle(e.target.value)}
+                        onBlur={() => touchField("title")}
                       />
                     )}
                   </Field>
@@ -297,6 +331,7 @@ export default function UploadPage() {
                         disabled={busy}
                         invalid={Boolean(errors.text)}
                         onChange={(e) => setText(e.target.value)}
+                        onBlur={() => touchField("text")}
                       />
                     )}
                   </Field>

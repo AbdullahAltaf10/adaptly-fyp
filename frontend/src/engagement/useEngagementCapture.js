@@ -13,6 +13,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { API_BASE_URL } from "../api/client";
+import { auth } from "../auth/firebase";
 import {
   CALIBRATION_FRAMES,
   CALIBRATION_INTERVAL_MS,
@@ -20,7 +22,7 @@ import {
   MIN_VALID_FRAMES,
   WINDOW_SIZE,
 } from "./constants";
-import { analyze, calibrate, endSession, startSession } from "./api";
+import { analyze, calibrate, endSession, fetchCalibrationStatus, startSession } from "./api";
 import { closeFaceLandmarker, createFaceLandmarker } from "./faceLandmarker";
 import {
   averageBrightness,
@@ -40,6 +42,7 @@ function newSessionId() {
 export function useEngagementCapture({
   active,
   contentId,
+  /** Fallback chunk, used only when `getChunkId` has nothing to report. */
   chunkId,
   /**
    * Returns seconds on the current chunk. A function rather than a value so
@@ -47,11 +50,22 @@ export function useEngagementCapture({
    * restarting it would tear down the camera and the landmarker.
    */
   getDwellSeconds,
+  /**
+   * Returns the chunk being read right now, read at send time. Same reason as
+   * above: the active chunk changes as the learner scrolls, and a value in
+   * this effect's dependencies would restart the camera on every scroll.
+   * Passing the getter is what lets each window carry the chunk it was
+   * actually captured on, which everything downstream depends on - the
+   * intervention's passage lookup, the critical-section flag, and Module 8's
+   * per-chunk analytics.
+   */
+  getChunkId,
 } = {}) {
   const videoRef = useRef(null);
   const landmarkerRef = useRef(null);
   const windowRef = useRef([]);
   const sessionIdRef = useRef(null);
+  const latestLandmarksRef = useRef(null);
 
   /**
    * True while an /analyze request is outstanding.
@@ -69,6 +83,10 @@ export function useEngagementCapture({
   // the capture loop.
   const dwellRef = useRef(getDwellSeconds);
   dwellRef.current = getDwellSeconds;
+  const chunkGetterRef = useRef(getChunkId);
+  chunkGetterRef.current = getChunkId;
+  const chunkFallbackRef = useRef(chunkId);
+  chunkFallbackRef.current = chunkId;
 
   const [status, setStatus] = useState("Waiting to start...");
   const [ready, setReady] = useState(false);
@@ -129,7 +147,7 @@ export function useEngagementCapture({
         const res = await analyze(frames, {
           sessionId,
           contentId,
-          chunkId,
+          chunkId: chunkGetterRef.current?.() ?? chunkFallbackRef.current ?? null,
           dwellSeconds: dwellRef.current?.() ?? 0,
         });
         if (!cancelled) setPrediction(res.data);
@@ -147,7 +165,9 @@ export function useEngagementCapture({
         videoRef.current,
         performance.now()
       );
-      windowRef.current.push(toLandmarkArray(results));
+      const landmarks = toLandmarkArray(results);
+      latestLandmarksRef.current = landmarks;
+      windowRef.current.push(landmarks);
       if (windowRef.current.length > WINDOW_SIZE) windowRef.current.shift();
       setFramesCollected(windowRef.current.length);
 
@@ -236,6 +256,27 @@ export function useEngagementCapture({
         await startSession(sessionId, contentId).catch(() => {});
         if (cancelled) return;
 
+        // Silently calibrate a never-calibrated learner on their own first
+        // few seconds, rather than requiring them to find and click
+        // "Calibrate now" themselves - 2026-09-30 audit: the pre-session
+        // dialog's own "Calibrate" button only calibrates WebGazer (Module
+        // 4's paragraph-focus signal), not this. Without this, /calibrate's
+        // own docstring already says "attentive users are classified as
+        // distracted". Skipped for an already-calibrated returning learner
+        // so their session id is not churned (runCalibration always starts
+        // a fresh session) on every single visit. Best-effort: a failed
+        // status check just proceeds uncalibrated rather than blocking
+        // the session on it.
+        try {
+          const status = await fetchCalibrationStatus();
+          if (!cancelled && !status.data.calibrated) {
+            await runCalibration();
+          }
+        } catch {
+          // Proceed uncalibrated - see comment above.
+        }
+        if (cancelled) return;
+
         setReady(true);
         detectLoop();
         captureTimer = setInterval(captureFrame, CAPTURE_INTERVAL_MS);
@@ -244,10 +285,37 @@ export function useEngagementCapture({
       }
     }
 
+    // Closing the tab or browser skips React's own unmount entirely, so the
+    // cleanup below never runs and the session is left open forever - which
+    // is exactly the gap behind "my session never showed up in analytics".
+    // `pagehide` fires in both cases (unlike `beforeunload`, it also covers a
+    // back/forward-cache navigation), and `fetch(..., { keepalive: true })`
+    // is the one request shape a browser still finishes sending after the
+    // page has gone. It is fire-and-forget on purpose: nothing can read a
+    // response once the page that would show it is already closing.
+    const endSessionOnUnload = () => {
+      auth.currentUser
+        ?.getIdToken()
+        .then((token) => {
+          fetch(`${API_BASE_URL}/engagement/session/end`, {
+            method: "POST",
+            keepalive: true,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ session_id: sessionId }),
+          });
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("pagehide", endSessionOnUnload);
+
     setup();
 
     return () => {
       cancelled = true;
+      window.removeEventListener("pagehide", endSessionOnUnload);
       if (captureTimer) clearInterval(captureTimer);
       if (lightingTimer) clearTimeout(lightingTimer);
       if (rafId) cancelAnimationFrame(rafId);
@@ -261,13 +329,26 @@ export function useEngagementCapture({
       setReady(false);
       setFramesCollected(0);
 
-      // Best effort: the tab may be closing. The backend also expires idle
-      // sessions, so a missed call here does not leak state indefinitely.
+      // Covers every other way this effect stops: `active` turning false (the
+      // learner clicked "End session" - see `endSessionNow` below, called
+      // first and awaited there) and an ordinary React unmount (navigating
+      // elsewhere in the app). Idempotent on the backend, so overlapping with
+      // an explicit call above costs nothing.
       endSession(sessionId).catch(() => {});
     };
-  }, [active, contentId, chunkId]);
+  }, [active, contentId]);
 
   const runCalibration = useCallback(() => calibrateRef.current?.(), []);
+
+  // Imperative, awaitable end - what "End session" actually calls, so the
+  // page can wait for the backend to acknowledge (and therefore finalize)
+  // before it navigates the learner to their analytics. The unmount/pagehide
+  // paths above still exist as the safety net for every way a session can end
+  // without a deliberate click.
+  const endSessionNow = useCallback(
+    () => endSession(sessionIdRef.current),
+    []
+  );
 
   return {
     videoRef,
@@ -283,6 +364,8 @@ export function useEngagementCapture({
     calibrationError,
     droppedWindows,
     runCalibration,
+    endSessionNow,
     windowSize: WINDOW_SIZE,
+    getLatestLandmarks: () => latestLandmarksRef.current,
   };
 }

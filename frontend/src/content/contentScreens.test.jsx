@@ -278,3 +278,35 @@ describe("the method tabs", () => {
     expect(screen.queryByText(/choose a pdf/i)).toBeNull();
   });
 });
+
+describe("adding a document: live validation, not only on submit", () => {
+  it("flags an oversized file the moment it is chosen, before clicking Add document", async () => {
+    const user = userEvent.setup();
+    draw(<UploadPage />);
+
+    const big = new File(["x"], "huge.pdf", { type: "application/pdf" });
+    Object.defineProperty(big, "size", { value: 26 * 1024 * 1024 });
+    await user.upload(screen.getByLabelText(/^file/i), big);
+
+    expect(await screen.findByText(/limit is 25/i)).toBeTruthy();
+    expect(api.uploadPdf).not.toHaveBeenCalled();
+  });
+
+  it("flags a malformed web address as soon as the field is left, before submitting", async () => {
+    const user = userEvent.setup();
+    draw(<UploadPage />);
+
+    await user.click(screen.getByRole("tab", { name: /web page/i }));
+    await user.type(screen.getByLabelText(/web address/i), "not a url");
+    await user.tab();
+
+    expect(await screen.findByText(/does not look like a web address|enter a web address/i)).toBeTruthy();
+    expect(api.addFromUrl).not.toHaveBeenCalled();
+  });
+
+  it("shows nothing for a field that has not been reached yet", () => {
+    draw(<UploadPage />);
+
+    expect(screen.queryByText(/choose a pdf to upload/i)).not.toBeInTheDocument();
+  });
+});

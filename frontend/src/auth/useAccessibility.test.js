@@ -10,6 +10,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ACCESSIBILITY_FIELDS,
   DEFAULT_ACCESSIBILITY,
+  FONT_CHOICES,
+  LINE_SPACING_CHOICES,
   applyAccessibility,
   readStoredAccessibility,
   resolveAccessibility,
@@ -20,6 +22,27 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-focus-isolation");
   document.documentElement.style.cssText = "";
   window.localStorage.clear();
+});
+
+describe("what the shared contract allows", () => {
+  it("offers exactly the two fonts user-profile.schema.json allows", () => {
+    expect(Object.keys(FONT_CHOICES).sort()).toEqual(["default", "opendyslexic"]);
+  });
+
+  it("stores line spacing as a number, never a name", () => {
+    for (const preset of LINE_SPACING_CHOICES) {
+      expect(typeof preset.value).toBe("number");
+      expect(preset.value).toBeGreaterThanOrEqual(1);
+      expect(preset.value).toBeLessThanOrEqual(3);
+    }
+    expect(typeof DEFAULT_ACCESSIBILITY.line_spacing).toBe("number");
+  });
+
+  it("defaults to what the backend writes for a new profile", () => {
+    // users/models.py DEFAULT_ACCESSIBILITY: font "default", line_spacing 1.5
+    expect(DEFAULT_ACCESSIBILITY.font).toBe("default");
+    expect(DEFAULT_ACCESSIBILITY.line_spacing).toBe(1.5);
+  });
 });
 
 describe("the field names the backend actually stores", () => {
@@ -49,9 +72,9 @@ describe("applying settings to the document", () => {
   });
 
   it("sets the font stack and line height", () => {
-    applyAccessibility({ font: "serif", line_spacing: "loose" });
+    applyAccessibility({ font: "opendyslexic", line_spacing: 2.2 });
     const root = document.documentElement;
-    expect(root.style.getPropertyValue("--font-sans")).toMatch(/Georgia/);
+    expect(root.style.getPropertyValue("--font-sans")).toMatch(/OpenDyslexic/);
     expect(root.style.lineHeight).toBe("2.2");
   });
 
@@ -73,6 +96,29 @@ describe("settings that arrive incomplete or wrong", () => {
     const resolved = resolveAccessibility({ font: "comic-sans", line_spacing: "enormous" });
     expect(resolved.font).toBe(DEFAULT_ACCESSIBILITY.font);
     expect(resolved.line_spacing).toBe(DEFAULT_ACCESSIBILITY.line_spacing);
+  });
+
+  it("keeps a choice an older build stored under its old name", () => {
+    // Earlier builds saved "serif" and "loose". Discarding them would reset
+    // every existing learner's settings the day this shipped.
+    const resolved = resolveAccessibility({ font: "serif", line_spacing: "loose" });
+    expect(resolved.font).toBe("default");
+    expect(resolved.line_spacing).toBe(2.2);
+  });
+
+  it("clamps line spacing into the contract's 1-3 range instead of rejecting it", () => {
+    expect(resolveAccessibility({ line_spacing: 9 }).line_spacing).toBe(3);
+    expect(resolveAccessibility({ line_spacing: 0.2 }).line_spacing).toBe(1);
+    expect(resolveAccessibility({ line_spacing: 1.75 }).line_spacing).toBe(1.75);
+  });
+
+  it("does not accept NaN or Infinity as a line spacing", () => {
+    expect(resolveAccessibility({ line_spacing: NaN }).line_spacing).toBe(
+      DEFAULT_ACCESSIBILITY.line_spacing
+    );
+    expect(resolveAccessibility({ line_spacing: Infinity }).line_spacing).toBe(
+      DEFAULT_ACCESSIBILITY.line_spacing
+    );
   });
 
   it("coerces truthiness rather than trusting the type", () => {

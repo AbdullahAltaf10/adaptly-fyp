@@ -1,15 +1,16 @@
 /**
  * What an intervention looks like on screen.
  *
- * Styling here is deliberately plain - this exists so the delivery path can be
- * seen working end to end, and the visual design comes later. Two constraints
- * are not cosmetic though, and should survive any redesign:
+ * Two constraints are not cosmetic and must survive any redesign:
  *
  * **Nothing flashes, nothing interrupts.** Scope 6.4 asks for support
  * delivered inline "without any sound, flash, or alert". So: no modal, no
- * overlay, no focus stealing, no animation. `aria-live="polite"` rather than
- * `assertive`, so a screen reader mentions it at the next pause instead of
- * cutting in - an assertive live region is the alert the scope rules out.
+ * overlay, no focus stealing, no animation on arrival. `aria-live="polite"`
+ * rather than `assertive`, so a screen reader mentions it at the next pause
+ * instead of cutting in - an assertive live region is the alert the scope
+ * rules out. The card design below (a quiet left accent bar, no motion, no
+ * colour louder than the rest of the page) is the visual expression of the
+ * same rule, not a decoration on top of it.
  *
  * **No scores.** Scope 6.8 allows no engagement scores or state indicators
  * during an active session. The server already leaves confidence and the
@@ -18,10 +19,11 @@
  *
  * The original text is shown beside the rewrite rather than replacing it. A
  * learner cannot judge a rewrite they are not allowed to compare against, and
- * silently swapping the words under somebody mid-paragraph is exactly the kind
- * of interruption the scope is trying to avoid.
+ * silently swapping the words under somebody mid-paragraph is exactly the
+ * kind of interruption the scope is trying to avoid.
  */
 
+import { Coffee, ListChecks, MessageCircleQuestion, Wand2 } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -30,20 +32,25 @@ import {
   BULLET_SUMMARY,
   SIMPLIFY_CONTENT,
 } from "./constants";
+import { Button } from "../ui";
 
-const panel = {
-  border: "1px solid #c8d4e3",
-  borderLeft: "4px solid #0b6bcb",
-  borderRadius: "6px",
-  background: "#f7faff",
-  padding: "0.85rem 1rem",
-  margin: "0.75rem 0",
-  textAlign: "left",
-  fontSize: "0.95rem",
-};
+const CARD =
+  "rounded-card shadow-card border border-line border-l-4 border-l-accent " +
+  "bg-surface p-4 my-3 text-left text-sm";
 
-const row = { display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" };
-const quiet = { fontSize: "0.8rem", color: "#5a6b7d", margin: "0 0 0.5rem" };
+const ROW = "flex flex-wrap gap-2 mt-3";
+
+/** The icon + label every card opens with, so the four types read consistently. */
+function CardHeading({ icon: Icon, children }) {
+  return (
+    <div className="flex items-center gap-2 mb-2">
+      <span className="flex items-center justify-center w-7 h-7 rounded-full bg-info-soft text-accent shrink-0">
+        <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
+      </span>
+      <h4 className="m-0 text-base font-semibold text-ink">{children}</h4>
+    </div>
+  );
+}
 
 /**
  * A generated rewrite or summary, with the original available beside it.
@@ -52,50 +59,43 @@ const quiet = { fontSize: "0.8rem", color: "#5a6b7d", margin: "0 0 0.5rem" };
  * screen, which is why Module 8 measures it from `displayed` - so the buttons
  * here only end it.
  */
-function GeneratedText({ intervention, content, onComplete, onDismiss }) {
+export function GeneratedText({ intervention, content, onComplete, onDismiss }) {
   const [showOriginal, setShowOriginal] = useState(false);
   const isSummary = intervention.intervention_type === BULLET_SUMMARY;
 
   return (
-    <section style={panel} aria-live="polite" data-testid="intervention-generated">
-      <p style={quiet}>{intervention.reason}</p>
-      <h4 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>
+    <section className={CARD} aria-live="polite" data-testid="intervention-generated">
+      <p className="m-0 mb-2 text-xs text-muted">{intervention.reason}</p>
+      <CardHeading icon={isSummary ? ListChecks : Wand2}>
         {isSummary ? "The main points" : "A simpler version"}
-      </h4>
+      </CardHeading>
 
-      <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-        {content?.generated}
-      </div>
+      <div className="whitespace-pre-wrap leading-relaxed text-ink">{content?.generated}</div>
 
       {showOriginal && (
-        <div
-          style={{
-            whiteSpace: "pre-wrap",
-            lineHeight: 1.6,
-            marginTop: "0.75rem",
-            paddingTop: "0.75rem",
-            borderTop: "1px dashed #c8d4e3",
-            color: "#44586c",
-          }}
-        >
-          <strong style={{ display: "block", fontSize: "0.8rem" }}>Original</strong>
+        <div className="whitespace-pre-wrap leading-relaxed mt-3 pt-3 border-t border-dashed border-line text-muted">
+          <strong className="block text-xs text-ink mb-1">Original</strong>
           {content?.original}
         </div>
       )}
 
-      <div style={row}>
-        <button onClick={onComplete}>Done</button>
-        <button onClick={() => setShowOriginal((v) => !v)}>
+      <div className={ROW}>
+        <Button variant="secondary" onClick={onComplete}>
+          Done
+        </Button>
+        <Button variant="quiet" onClick={() => setShowOriginal((v) => !v)}>
           {showOriginal ? "Hide original" : "Show original"}
-        </button>
-        <button onClick={onDismiss}>Not helpful</button>
+        </Button>
+        <Button variant="quiet" onClick={onDismiss}>
+          Not helpful
+        </Button>
       </div>
 
       {/* Which generator wrote this. A fallback result must never be mistaken
           for model output, and this is a development instrument rather than
           something a learner needs, so it stays small and last. */}
       {content?.generator && content.generator !== "gemini" && (
-        <p style={{ ...quiet, margin: "0.5rem 0 0" }}>
+        <p className="text-xs text-muted mt-2 mb-0">
           Assembled from the passage itself, not rewritten.
         </p>
       )}
@@ -114,32 +114,33 @@ function GeneratedText({ intervention, content, onComplete, onDismiss }) {
  */
 function LearnerChoice({ intervention, accepted, onAccept, onComplete, onDismiss }) {
   const isBreak = intervention.intervention_type === BREAK_SUGGESTION;
+  const Icon = isBreak ? Coffee : MessageCircleQuestion;
 
   if (accepted) {
     return (
-      <section style={panel} aria-live="polite" data-testid="intervention-accepted">
-        <p style={{ margin: 0 }}>
-          {isBreak
-            ? "Take as long as you need."
-            : "The assistant is ready when you are."}
+      <section className={CARD} aria-live="polite" data-testid="intervention-accepted">
+        <CardHeading icon={Icon}>{isBreak ? "Taking a break" : "Assistant ready"}</CardHeading>
+        <p className="m-0 text-ink">
+          {isBreak ? "Take as long as you need." : "The assistant is ready when you are."}
         </p>
-        <div style={row}>
-          <button onClick={onComplete}>
+        <div className={ROW}>
+          <Button variant="secondary" onClick={onComplete}>
             {isBreak ? "I'm back" : "Done"}
-          </button>
+          </Button>
         </div>
       </section>
     );
   }
 
   return (
-    <section style={panel} aria-live="polite" data-testid="intervention-choice">
-      <p style={{ margin: 0 }}>{intervention.reason}</p>
-      <div style={row}>
-        <button onClick={onAccept}>
-          {isBreak ? "Take a break" : "Ask the assistant"}
-        </button>
-        <button onClick={onDismiss}>Not now</button>
+    <section className={CARD} aria-live="polite" data-testid="intervention-choice">
+      <CardHeading icon={Icon}>{isBreak ? "Take a break?" : "Need a hand?"}</CardHeading>
+      <p className="m-0 text-ink">{intervention.reason}</p>
+      <div className={ROW}>
+        <Button onClick={onAccept}>{isBreak ? "Take a break" : "Ask the assistant"}</Button>
+        <Button variant="quiet" onClick={onDismiss}>
+          Not now
+        </Button>
       </div>
     </section>
   );
@@ -161,7 +162,7 @@ export default function InterventionHost({
 }) {
   if (loading) {
     return (
-      <p style={quiet} aria-live="polite" data-testid="intervention-loading">
+      <p className="text-xs text-muted" aria-live="polite" data-testid="intervention-loading">
         Preparing something that might help...
       </p>
     );

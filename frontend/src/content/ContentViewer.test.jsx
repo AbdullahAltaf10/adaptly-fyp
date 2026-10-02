@@ -109,6 +109,28 @@ describe("what the learner sees", () => {
   });
 });
 
+describe("paragraph focus highlight", () => {
+  it("highlights the chunk that matches activeChunkId when confidence clears the threshold", () => {
+    render(<ContentViewer content={CONTENT} activeChunkId="ch-1" fusionConfidence={0.5} />);
+    const focused = screen.getByText(CONTENT.chunks[1].text).closest("section");
+    const other = screen.getByText(CONTENT.chunks[0].text).closest("section");
+    expect(focused.className).toMatch(/bg-accent/);
+    expect(other.className).not.toMatch(/bg-accent/);
+  });
+
+  it("does not highlight anything when confidence is below the threshold", () => {
+    render(<ContentViewer content={CONTENT} activeChunkId="ch-1" fusionConfidence={0.1} />);
+    const focused = screen.getByText(CONTENT.chunks[1].text).closest("section");
+    expect(focused.className).not.toMatch(/bg-accent/);
+  });
+
+  it("does not highlight anything when activeChunkId is null", () => {
+    render(<ContentViewer content={CONTENT} activeChunkId={null} fusionConfidence={0.9} />);
+    const first = screen.getByText(CONTENT.chunks[1].text).closest("section");
+    expect(first.className).not.toMatch(/bg-accent/);
+  });
+});
+
 describe("documents that are not there", () => {
   it("says so rather than rendering an empty page", () => {
     render(<ContentViewer content={null} />);

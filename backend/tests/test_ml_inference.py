@@ -132,6 +132,17 @@ def test_manifest_records_shape_and_class_mapping():
     assert manifest["feature_order"] == FEATURE_NAMES
 
 
+def test_the_applied_threshold_is_the_one_the_manifest_documents():
+    # The code applies 0.36 while the manifest also carries the exported
+    # artifact's own 0.34. Both are legitimate and both are explained in the
+    # manifest - but the explanation is only trustworthy while it names the
+    # number that is actually applied, so changing one without the other fails.
+    variant = ml_model.load_manifest()["calibrated_variant"]
+    assert variant["production_threshold"] == ml_model.CALIBRATED_STRUGGLING_THRESHOLD
+    assert variant["recommended_threshold"] != variant["production_threshold"]
+    assert "production_threshold_note" in variant
+
+
 def test_model_loads_and_predicts():
     features = extract_features(make_landmarks())
     result = ml_model.predict([features] * 10)

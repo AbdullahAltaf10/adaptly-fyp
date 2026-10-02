@@ -7,6 +7,52 @@ const allowedEmotionSignals = new Set(["neutral", "confusion", "frustration"]);
 // Firebase ID token this endpoint now requires (Issue #34). Switching this
 // import is the only frontend change needed for auth - AssistantPanel.jsx
 // never has to know a token exists.
+function validQuestions(data) {
+  return Array.isArray(data?.suggested_questions)
+    && data.suggested_questions.length === 3
+    && data.suggested_questions.every((question) => typeof question === "string" && question.trim());
+}
+
+/**
+ * Questions worth asking about the paragraph the learner is on.
+ *
+ * Asked whenever the active paragraph changes, so the suggestions describe what
+ * is on screen instead of staying the same three generic questions all session.
+ * The backend answers locally (no model call), so this is cheap enough to do on
+ * every scroll. Resolves to the three strings, or rejects - the panel keeps its
+ * fallback questions in that case rather than showing nothing.
+ */
+export async function fetchSuggestedQuestions(currentChunk, options = {}) {
+  const response = await api.post(
+    "/assistant/suggestions",
+    {
+      current_chunk: {
+        chunk_id: currentChunk.chunk_id,
+        text: currentChunk.text,
+        ...(currentChunk.section_title ? { section_title: currentChunk.section_title } : {}),
+      },
+    },
+    { signal: options.signal }
+  );
+  if (!validQuestions(response?.data)) {
+    throw new Error("Assistant service returned invalid suggestions.");
+  }
+  return response.data.suggested_questions;
+}
+
+/**
+ * The learner's own persistent assistant conversation, newest first as the
+ * server returns it - reversed here so the panel can append to it in
+ * chronological order the same way it already appends new messages.
+ */
+export async function fetchAssistantHistory(options = {}) {
+  const response = await api.get("/assistant/history", { signal: options.signal });
+  if (!Array.isArray(response?.data?.messages)) {
+    throw new Error("Assistant service returned an invalid history.");
+  }
+  return [...response.data.messages].reverse();
+}
+
 export async function sendAssistantMessage(payload, options = {}) {
   let response;
   try {

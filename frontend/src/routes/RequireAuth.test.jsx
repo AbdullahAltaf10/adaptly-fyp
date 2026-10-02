@@ -18,14 +18,14 @@ vi.mock("../auth/AuthContext", () => ({
 
 import RequireAuth from "./RequireAuth";
 
-function renderAt(path = "/study", { requireVerified = true } = {}) {
+function renderAt(path = "/study", { requireVerified = true, requireDeviceTrust = true } = {}) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           path="/study"
           element={
-            <RequireAuth requireVerified={requireVerified}>
+            <RequireAuth requireVerified={requireVerified} requireDeviceTrust={requireDeviceTrust}>
               <p>the protected page</p>
             </RequireAuth>
           }
@@ -33,6 +33,7 @@ function renderAt(path = "/study", { requireVerified = true } = {}) {
         <Route path="/signin" element={<p>sign in screen</p>} />
         <Route path="/register" element={<p>register screen</p>} />
         <Route path="/verify-email" element={<p>verify screen</p>} />
+        <Route path="/verify-device" element={<p>verify device screen</p>} />
       </Routes>
     </MemoryRouter>
   );
@@ -113,6 +114,70 @@ describe("the two loops this guard has to avoid", () => {
     // requireVerified={false} is how /verify-email avoids redirecting to itself.
     authState.value = { loading: false, currentUser: unverifiedUser, profile: { uid: "u" } };
     renderAt("/study", { requireVerified: false });
+    expect(screen.getByText("the protected page")).toBeTruthy();
+  });
+});
+
+describe("device-trust 2FA", () => {
+  it("does not gate at all when the feature is disabled (Gmail not configured)", () => {
+    authState.value = {
+      loading: false,
+      currentUser: verifiedUser,
+      profile: { uid: "u" },
+      twoFactorEnabled: false,
+      deviceTrusted: false,
+    };
+    renderAt();
+    expect(screen.getByText("the protected page")).toBeTruthy();
+  });
+
+  it("waits, rather than flashing the page, while device trust is still unknown", () => {
+    authState.value = {
+      loading: false,
+      currentUser: verifiedUser,
+      profile: { uid: "u" },
+      twoFactorEnabled: true,
+      deviceTrusted: null,
+    };
+    renderAt();
+    expect(screen.queryByText("the protected page")).toBeNull();
+    expect(screen.getByText(/checking this device/i)).toBeTruthy();
+  });
+
+  it("sends an untrusted device to /verify-device", () => {
+    authState.value = {
+      loading: false,
+      currentUser: verifiedUser,
+      profile: { uid: "u" },
+      twoFactorEnabled: true,
+      deviceTrusted: false,
+    };
+    renderAt();
+    expect(screen.getByText("verify device screen")).toBeTruthy();
+  });
+
+  it("lets a trusted device through", () => {
+    authState.value = {
+      loading: false,
+      currentUser: verifiedUser,
+      profile: { uid: "u" },
+      twoFactorEnabled: true,
+      deviceTrusted: true,
+    };
+    renderAt();
+    expect(screen.getByText("the protected page")).toBeTruthy();
+  });
+
+  it("lets the verify-device screen itself render for an untrusted device", () => {
+    // requireDeviceTrust={false} is how /verify-device avoids redirecting to itself.
+    authState.value = {
+      loading: false,
+      currentUser: verifiedUser,
+      profile: { uid: "u" },
+      twoFactorEnabled: true,
+      deviceTrusted: false,
+    };
+    renderAt("/study", { requireDeviceTrust: false });
     expect(screen.getByText("the protected page")).toBeTruthy();
   });
 });

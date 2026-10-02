@@ -50,3 +50,16 @@ def verify_firebase_token(id_token: str):
     """Verify a Firebase ID token and return its decoded claims."""
     _ensure_initialised()
     return auth.verify_id_token(id_token)
+
+
+def mint_custom_token(uid: str) -> str:
+    """
+    Issue a Firebase custom token for `uid`, so the frontend can trade it for a
+    real Firebase session via `signInWithCustomToken`.
+
+    This is what lets passkey sign-in end at the same place password sign-in
+    does: WebAuthn proves who the caller is, but only Firebase can hand out a
+    session the rest of the app already knows how to read.
+    """
+    _ensure_initialised()
+    return auth.create_custom_token(uid).decode("utf-8")

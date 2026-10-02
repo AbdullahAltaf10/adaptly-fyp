@@ -19,6 +19,7 @@
  * asking them to verify something already verified.
  */
 
+import { CheckCircle2, LogOut, Mail, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { sendEmailVerification, signOut } from "firebase/auth";
@@ -101,7 +102,12 @@ export default function VerifyEmailPage() {
   return (
     <CenteredPage>
       <Card
-        title="Confirm your email address"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <Mail size={20} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+            Confirm your email address
+          </span>
+        }
         subtitle={`We sent a link to ${currentUser?.email ?? "your address"}. Open it to finish setting up.`}
       >
         {error && <Alert tone="error">{error}</Alert>}
@@ -118,6 +124,7 @@ export default function VerifyEmailPage() {
 
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => check({ announce: true })} busy={checking} busyLabel="Checking...">
+            <CheckCircle2 size={16} strokeWidth={1.75} aria-hidden="true" />
             I have confirmed it
           </Button>
 
@@ -128,6 +135,7 @@ export default function VerifyEmailPage() {
             busyLabel="Sending..."
             disabled={cooldown > 0}
           >
+            <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" />
             {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend the email"}
           </Button>
         </div>
@@ -136,9 +144,10 @@ export default function VerifyEmailPage() {
           Wrong address?{" "}
           <button
             type="button"
-            className="text-accent hover:underline"
+            className="inline-flex items-center gap-1 text-accent hover:underline"
             onClick={() => signOut(auth).then(() => navigate("/signin", { replace: true }))}
           >
+            <LogOut size={13} strokeWidth={1.75} aria-hidden="true" />
             Sign out and start again
           </button>
         </p>

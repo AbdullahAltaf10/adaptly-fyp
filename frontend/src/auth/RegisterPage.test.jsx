@@ -126,3 +126,68 @@ describe("RegisterPage: what actually reaches the backend", () => {
     expect(firebaseAuth.createUserWithEmailAndPassword).not.toHaveBeenCalled();
   });
 });
+
+describe("RegisterPage: live validation, not only on submit", () => {
+  it("shows nothing for an untouched field", () => {
+    draw();
+
+    expect(screen.queryByText(/enter a password/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/does not look like an email/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a password problem as soon as the learner leaves the field, before submitting", async () => {
+    const user = userEvent.setup();
+    draw();
+
+    await user.type(screen.getByLabelText(/^password/i), "short");
+    await user.tab();
+
+    expect(await screen.findByText(/use at least 8 characters/i)).toBeInTheDocument();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it("clears the password message as soon as it becomes long enough, without leaving the field", async () => {
+    const user = userEvent.setup();
+    draw();
+
+    const passwordField = screen.getByLabelText(/^password/i);
+    await user.type(passwordField, "short");
+    await user.tab();
+    await screen.findByText(/use at least 8 characters/i);
+
+    await user.type(passwordField, "-enough-now");
+
+    await waitFor(() =>
+      expect(screen.queryByText(/use at least 8 characters/i)).not.toBeInTheDocument()
+    );
+  });
+
+  it("flags a mismatched confirmation the moment it is left, and updates it as the password changes", async () => {
+    const user = userEvent.setup();
+    draw();
+
+    await user.type(screen.getByLabelText(/^password/i), "correct-horse-battery");
+    await user.type(screen.getByLabelText(/confirm password/i), "does-not-match");
+    await user.tab();
+
+    expect(await screen.findByText(/do not match/i)).toBeInTheDocument();
+
+    // Fixing the ORIGINAL password field must also clear a confirmation
+    // error that was about the old value - it is not only re-checked when
+    // the confirmation field itself is touched again.
+    await user.clear(screen.getByLabelText(/^password/i));
+    await user.type(screen.getByLabelText(/^password/i), "does-not-match");
+
+    await waitFor(() => expect(screen.queryByText(/do not match/i)).not.toBeInTheDocument());
+  });
+
+  it("shows an invalid email as soon as the field is left", async () => {
+    const user = userEvent.setup();
+    draw();
+
+    await user.type(screen.getByLabelText(/email address/i), "not-an-email");
+    await user.tab();
+
+    expect(await screen.findByText(/does not look like an email/i)).toBeInTheDocument();
+  });
+});

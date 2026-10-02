@@ -16,6 +16,7 @@ hashes when anything looks off.
 import hashlib
 import json
 import os
+import threading
 
 import numpy as np
 
@@ -49,6 +50,12 @@ MANIFEST_FILE = "MANIFEST.json"
 # precision lift >= 1.15 and flag rate <= 0.25, then maximise recall. Lower
 # thresholds reach more learners - tau=0.30 reaches 15 of 19 - but at a 0.358
 # flag rate, which is a learner interrupted on a third of their windows.
+#
+# MANIFEST.json also carries `recommended_threshold: 0.34`. That is not a
+# contradiction: 0.34 is train_calibrated.py's validation-derived value for the
+# single exported artifact, 0.36 is calibrated_threshold.py's 5-seed average,
+# and 0.36 is the one applied here (see MANIFEST `production_threshold_note`
+# for the measured difference between them).
 CALIBRATED_STRUGGLING_THRESHOLD = 0.36
 
 # Index -> label. Lowercase to match shared/contracts/engagement-event.schema.json.
@@ -61,6 +68,12 @@ FEATURE_COUNT = 9
 # Cached per variant: a session can contain both calibrated and uncalibrated
 # learners, so neither may evict the other.
 _loaded = {}
+
+# One load at a time. The server warms the models on a background thread at
+# start-up (app/engagement/warmup.py) while the first learner's request can
+# arrive on another; without this both would import TensorFlow and load the
+# same 400 KB file, and the second would throw its copy away.
+_load_lock = threading.Lock()
 
 
 def artifact_path(filename: str) -> str:
@@ -104,26 +117,32 @@ def load_model(calibrated: bool = False):
     if key in _loaded:
         return _loaded[key]
 
-    # TensorFlow is imported here rather than at module level: importing it
-    # takes 13+ seconds, and doing that at import time delayed server startup
-    # and blocked the first prediction.
-    import pickle
+    with _load_lock:
+        # Checked again inside the lock: whoever was holding it may have just
+        # loaded exactly this variant.
+        if key in _loaded:
+            return _loaded[key]
 
-    import tensorflow as tf
+        # TensorFlow is imported here rather than at module level: importing it
+        # takes 13+ seconds, and doing that at import time delayed server
+        # startup and blocked the first prediction.
+        import pickle
 
-    model_file = CALIBRATED_MODEL_FILE if calibrated else MODEL_FILE
-    scaler_file = CALIBRATED_SCALER_FILE if calibrated else SCALER_FILE
-    model_path = artifact_path(model_file)
-    scaler_path = artifact_path(scaler_file)
-    for path in (model_path, scaler_path):
-        if not os.path.exists(path):
-            raise RuntimeError(f"Missing model artifact: {path}")
+        import tensorflow as tf
 
-    model = tf.keras.models.load_model(model_path)
-    with open(scaler_path, "rb") as handle:
-        scaler = pickle.load(handle)
-    _loaded[key] = (model, scaler)
-    return _loaded[key]
+        model_file = CALIBRATED_MODEL_FILE if calibrated else MODEL_FILE
+        scaler_file = CALIBRATED_SCALER_FILE if calibrated else SCALER_FILE
+        model_path = artifact_path(model_file)
+        scaler_path = artifact_path(scaler_file)
+        for path in (model_path, scaler_path):
+            if not os.path.exists(path):
+                raise RuntimeError(f"Missing model artifact: {path}")
+
+        model = tf.keras.models.load_model(model_path)
+        with open(scaler_path, "rb") as handle:
+            scaler = pickle.load(handle)
+        _loaded[key] = (model, scaler)
+        return _loaded[key]
 
 
 def predict(feature_sequence, struggling_threshold: float = None,

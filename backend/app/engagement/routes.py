@@ -28,6 +28,7 @@ from app.engagement import (
 from app.engagement.analytics_sink import record_engagement_event
 from app.engagement.calibration import apply_calibration, compute_offset, compute_user_baseline
 from ml.inference.model import CALIBRATED_STRUGGLING_THRESHOLD
+from app.intervention import content as intervention_content
 from app.intervention import service as intervention
 from app.analytics.service import session_lifecycle
 from app.compliance.service import session_hooks as compliance_session_hooks
@@ -163,10 +164,31 @@ def calibrate(payload: CalibrateRequest, user=Depends(get_current_user)):
     return {"message": "Calibration complete"}
 
 
+@router.get("/calibration-status")
+def calibration_status(user=Depends(get_current_user)):
+    """
+    Whether this learner already has a stored baseline.
+
+    Lets the frontend decide, before a session starts, whether to silently
+    auto-calibrate on this learner's very first session - see /calibrate's
+    own docstring for why an uncalibrated learner is systematically
+    misclassified. Checked rather than always auto-calibrating so an
+    already-calibrated returning learner is not made to wait through another
+    calibration pass (and does not have their session id churned again -
+    see useEngagementCapture.js's runCalibration, which starts a fresh
+    session on every calibration).
+    """
+    return {"calibrated": db.calibration.find_one({"uid": user["uid"]}) is not None}
+
+
 @router.post("/analyze")
 def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
     """
-    Classify one 10-second window.
+    Classify one window of the last 10 seconds.
+
+    The browser calls this about once a second with a sliding window, so
+    consecutive calls share 9 of their 10 frames - which is why smoothing and
+    the rule detectors count windows, not seconds of independent evidence.
 
     Returns the engagement event in contract shape, plus a separate
     `diagnostics` object. The diagnostics are development instruments and are
@@ -289,6 +311,17 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
             state, source = smoothed["state"], contracts.SOURCE_MODEL
             confidence = contracts.confidence_for(prediction, state)
 
+        # Read from the stored chunk, never from the request - the same
+        # trust boundary as is_critical (content.py), and for the same
+        # reason: a client-supplied order would let a browser manufacture a
+        # revisit detection that never happened.
+        resolved_chunk_order = intervention_content.chunk_order(
+            uid, payload.content_id, payload.chunk_id
+        )
+        rereading_result = rereading.update(
+            uid, session_id, resolved_chunk_order, payload.dwell_seconds or 0.0
+        )
+
         event = contracts.build_engagement_event(
             user_id=uid,
             session_id=session_id,
@@ -299,7 +332,7 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
             content_id=payload.content_id,
             chunk_id=payload.chunk_id,
             deep_thinking_detected=dt_result["deep_thinking"],
-            gaze_regression_detected=False,   # never measured; see rereading.py
+            gaze_regression_detected=rereading_result["detected"],
         )
 
         record_engagement_event(event)
@@ -329,6 +362,10 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
                 chunk_id=payload.chunk_id,
                 dwell_seconds=payload.dwell_seconds,
                 engagement_event_id=event["event_id"],
+                # Which model file to name on the event: the calibrated pair is
+                # what produced this trigger for a calibrated learner.
+                calibrated=calibrated,
+                paragraph_revisit_detected=rereading_result["detected"],
             )
         except Exception as error:
             decision = {"intervention": None, "note": f"intervention path failed: {error}"}
@@ -351,7 +388,7 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
                 "furrow": furrow_result,
                 "deep_thinking": dt_result,
                 "recovery": recovery_result,
-                "rereading": rereading.detect_rereading([]),
+                "rereading": rereading_result,
                 "intervention": decision["note"],
             },
         }

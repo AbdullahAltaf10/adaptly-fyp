@@ -42,7 +42,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.analytics.persistence.field_allowlists import INTERVENTION_EVENT_FIELDS  # noqa: E402
 from app.auth.dependencies import get_current_user  # noqa: E402
-from app.intervention.policy import POLICY_VERSION  # noqa: E402
+from app.intervention.policy import DefaultPolicy, POLICY_VERSION  # noqa: E402
 from app.engagement import furrow, routes as engagement_routes  # noqa: E402
 from app.intervention import content, contracts, cooldown, service, store  # noqa: E402
 from app.intervention.decider import (  # noqa: E402
@@ -418,6 +418,44 @@ def test_an_offered_intervention_is_stored_before_it_is_returned(fake_store):
     assert stored["policy_version"] == POLICY_VERSION
 
 
+def test_the_event_names_the_model_that_actually_produced_the_trigger(fake_store):
+    """
+    A calibrated learner is served the calibrated model, and the event used to
+    carry the plain model's hash regardless - so nothing downstream could tell
+    which of the two had fired.
+    """
+    plain = service.evaluate(
+        "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        raw_struggling=True, brow_struggling=False, engagement_event_id="e1",
+        calibrated=False,
+    )
+    cooldown.reset("u1", "s1")
+    calibrated = service.evaluate(
+        "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        raw_struggling=True, brow_struggling=False, engagement_event_id="e2",
+        calibrated=True,
+    )
+
+    plain_version = store.get(plain["intervention"]["intervention_id"])["model_version"]
+    calibrated_version = store.get(calibrated["intervention"]["intervention_id"])["model_version"]
+
+    assert plain_version.startswith("best_model_9f.keras@")
+    assert calibrated_version.startswith("best_model_9f_calibrated.keras@")
+    assert plain_version != calibrated_version
+
+
+def test_the_model_version_is_the_hash_the_manifest_records():
+    from ml.inference import model as ml_model
+
+    manifest = ml_model.load_manifest()["artifacts"]
+    assert service.model_version(False).endswith(
+        manifest[ml_model.MODEL_FILE]["sha256"][:12]
+    )
+    assert service.model_version(True).endswith(
+        manifest[ml_model.CALIBRATED_MODEL_FILE]["sha256"][:12]
+    )
+
+
 def test_nothing_is_offered_if_it_could_not_be_stored(fake_store):
     """
     An intervention the server has no record of is one the browser cannot
@@ -556,6 +594,81 @@ def test_module_6_can_replace_the_policy_without_touching_delivery(fake_store):
     assert result["intervention"]["intervention_type"] == BREAK_SUGGESTION
     stored = store.get(result["intervention"]["intervention_id"])
     assert stored["policy_version"] == "test-stub"
+
+
+def test_recovery_is_passed_to_the_decider_when_a_prior_decision_exists_this_session(fake_store, monkeypatch):
+    """Before issue #45's wiring, recovery was hardcoded to None regardless
+    of what a decider could compute from it. This proves a decider now
+    actually receives a real value once there is something to measure
+    recovery from."""
+    seen = []
+
+    class RecordingDecider:
+        policy_version = "test-recording"
+
+        def decide(self, signals, *, history=None, recovery=None):
+            seen.append(recovery)
+            # Must actually return a Decision - if nothing is ever stored,
+            # store.list_for_session stays empty and there is never a
+            # "prior decision" for the second call to find.
+            return Decision(
+                intervention_type=BREAK_SUGGESTION, reason_code="other",
+                reason="Stub.", tier=TIER_BROAD,
+            )
+
+    service.set_decider(RecordingDecider())
+    monkeypatch.setattr(
+        service, "_recovery_since_last_decision", lambda uid, session_id, since: True,
+    )
+    try:
+        # First decision this session: no prior decision to measure recovery
+        # from, so recovery must stay None - there is nothing to have
+        # recovered FROM yet.
+        service.evaluate(
+            "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+            raw_struggling=True, brow_struggling=False,
+        )
+        assert seen[-1] is None
+
+        # The first call fired (real Decision) and started a cooldown - clear
+        # it so the second call actually reaches the decider instead of
+        # short-circuiting on "cooling down".
+        cooldown.reset("u1", "s1")
+
+        # Second call: a prior decision now exists in history, so recovery
+        # must be computed (and here, per the monkeypatched function, is True).
+        service.evaluate(
+            "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+            raw_struggling=True, brow_struggling=False,
+        )
+        assert seen[-1] is True
+    finally:
+        service.set_decider(DefaultPolicy())
+
+
+def test_signals_carries_uid_and_session_id_through_to_the_decider(fake_store):
+    """FusionPolicy (Module 6) needs to look up this learner's own recent
+    chat history, and the InterventionDecider Protocol's decide(signals, *,
+    history, recovery=None) signature has no other place to carry identity -
+    see decider.py's Signals dataclass."""
+    seen = []
+
+    class RecordingDecider:
+        policy_version = "test-recording"
+
+        def decide(self, signals, *, history=None, recovery=None):
+            seen.append((signals.uid, signals.session_id))
+            return None
+
+    service.set_decider(RecordingDecider())
+    try:
+        service.evaluate(
+            "u1", "s1", state="focused", source="lstm", confidence=0.9,
+            raw_struggling=False, brow_struggling=False,
+        )
+        assert seen[-1] == ("u1", "s1")
+    finally:
+        service.set_decider(DefaultPolicy())
 
 
 def test_the_default_policy_stays_quiet_while_somebody_is_recovering(fake_store):

@@ -531,6 +531,23 @@ def test_a_section_is_only_critical_on_evidence(fake_content):
     assert content.is_critical("u1", None, None) is False
 
 
+def test_chunk_order_comes_from_the_stored_chunk_not_the_request(fake_content):
+    """
+    Same trust boundary as is_critical: a client claiming its own chunk_order
+    could otherwise manufacture a paragraph-revisit detection (rereading.py)
+    that never happened, by sending a lower order value than it actually
+    reached. Reading it from the stored chunk closes that the same way
+    is_critical already does.
+    """
+    assert content.chunk_order("u1", "c1", "7") == 7
+    assert content.chunk_order("u1", "c1", "8") == 8
+
+
+def test_chunk_order_is_none_when_the_chunk_cannot_be_found(fake_content):
+    assert content.chunk_order("u1", "c1", "nope") is None
+    assert content.chunk_order("u1", None, None) is None
+
+
 # --------------------------------------------------------------------------
 # The endpoint
 # --------------------------------------------------------------------------

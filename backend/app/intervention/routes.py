@@ -33,6 +33,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.ai_assistant import history_store
 from app.auth.dependencies import get_current_user
 from app.intervention import contracts, provider, service, simplify, store
 
@@ -128,6 +129,24 @@ def intervention_content(intervention_id: str, user=Depends(get_current_user)):
     except provider.GenerationFailed:
         # The message can echo the passage back, so it is not returned.
         raise HTTPException(status_code=503, detail="The text could not be generated.")
+
+    try:
+        # insert_message() already catches its own database errors and
+        # returns False rather than raising (see history_store.py) - this
+        # also guards against a bug in insert_message itself, so recording
+        # this turn can never turn a successful generation into a 500.
+        history_store.insert_message(
+            uid=user["uid"],
+            role="assistant",
+            content=result["generated"],
+            source="popup",
+            trigger=event["intervention_type"],
+            content_id=event.get("content_id"),
+            chunk_id=result["chunk_id"],
+            session_id=event.get("session_id"),
+        )
+    except Exception:
+        pass
 
     return {
         "intervention_id": intervention_id,

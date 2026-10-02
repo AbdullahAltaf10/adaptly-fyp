@@ -45,7 +45,10 @@ _decider = DefaultPolicy()
 # on one chunk is already past anything the gates distinguish.
 MAX_DWELL_SECONDS = 3600.0
 
-_model_version = None
+# Per variant, for the same reason ml/inference/model.py caches per variant: one
+# server serves calibrated and uncalibrated learners, and their triggers come
+# from different files.
+_model_versions: dict = {}
 
 
 def get_decider():
@@ -58,27 +61,69 @@ def set_decider(decider) -> None:
     _decider = decider
 
 
-def model_version() -> str:
+def model_version(calibrated: bool = False) -> str:
     """
     Which model produced the trigger, as filename plus a short content hash.
 
     MANIFEST.json records no version string, so the hash is the only thing that
-    actually changes when the artifact does. Read once - hashing the model on
-    every event would be wasteful, and this does not change while the process
-    is running.
+    actually changes when the artifact does. Read once per variant - hashing
+    the model on every event would be wasteful, and this does not change while
+    the process is running.
+
+    `calibrated` selects which file to name. It used to name the plain model
+    for everybody, so an event triggered by the calibrated model - the one a
+    calibrated learner is actually served - carried the other model's hash, and
+    nothing downstream could tell which of the two had produced it.
     """
-    global _model_version
-    if _model_version is None:
+    key = "calibrated" if calibrated else "plain"
+    if key not in _model_versions:
         try:
             from ml.inference import model as ml_model
 
+            filename = ml_model.CALIBRATED_MODEL_FILE if calibrated else ml_model.MODEL_FILE
             manifest = ml_model.load_manifest()
-            digest = manifest["artifacts"][ml_model.MODEL_FILE]["sha256"]
-            _model_version = f"{ml_model.MODEL_FILE}@{digest[:12]}"
+            digest = manifest["artifacts"][filename]["sha256"]
+            _model_versions[key] = f"{filename}@{digest[:12]}"
         except Exception:
             log.warning("model version could not be read from the manifest", exc_info=True)
-            _model_version = "unknown"
-    return _model_version
+            _model_versions[key] = "unknown"
+    return _model_versions[key]
+
+
+def _last_decision_timestamp(history: list):
+    """When the most recent prior decision this session was made, or None
+    if there isn't one yet. `history` is oldest-first (store.list_for_session's
+    own contract)."""
+    if not history:
+        return None
+    from app.analytics.domain.metrics import _parse_datetime
+
+    return _parse_datetime(history[-1]["timestamp"])
+
+
+def _recovery_since_last_decision(uid: str, session_id: str, since):
+    """Live recovery check (issue #45) - has this learner shown recovery
+    since their last intervention decision this session? None means "not
+    measurable" (a database problem here), which DefaultPolicy already
+    treats identically to "no prior decision yet": no escalation without a
+    real recovery signal. Fetching is done here, not in
+    analytics.domain.metrics, which stays infrastructure-independent (see
+    its own module docstring) - observed_recovery_since is pure and takes
+    the events as a plain list.
+    """
+    try:
+        from app.analytics.domain.metrics import observed_recovery_since
+        from app.analytics.persistence.events import EngagementEventRepository
+        from app.core.db import db
+
+        events = EngagementEventRepository(db).list_by_session(session_id)
+    except Exception:
+        log.warning(
+            "live recovery check for %s/%s could not read engagement events",
+            uid, session_id, exc_info=True,
+        )
+        return None
+    return observed_recovery_since(events, since)
 
 
 def evaluate(
@@ -94,6 +139,8 @@ def evaluate(
     chunk_id: str = None,
     dwell_seconds: float = 0.0,
     engagement_event_id: str = None,
+    calibrated: bool = False,
+    paragraph_revisit_detected: bool = False,
 ) -> dict:
     """
     Decide whether this window earns an intervention, and record it if so.
@@ -134,10 +181,15 @@ def evaluate(
         engagement_event_id=engagement_event_id,
         # From the learner's own stored profile, never from the request.
         discouraged_types=preferences.discouraged_for(uid),
+        paragraph_revisit_detected=paragraph_revisit_detected,
+        uid=uid,
+        session_id=session_id,
     )
 
     history = store.list_for_session(session_id)
-    decision = _decider.decide(signals, history=history, recovery=None)
+    last_decision_at = _last_decision_timestamp(history)
+    recovery = None  # MUTATION
+    decision = _decider.decide(signals, history=history, recovery=recovery)
     if decision is None:
         return {"intervention": None, "note": "no intervention warranted"}
 
@@ -147,7 +199,7 @@ def evaluate(
         session_id=session_id,
         triggering_engagement_state=state,
         policy_version=getattr(_decider, "policy_version", None),
-        model_version=model_version(),
+        model_version=model_version(calibrated),
     )
 
     if not store.save(event):

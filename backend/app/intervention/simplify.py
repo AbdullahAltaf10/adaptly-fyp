@@ -12,10 +12,10 @@ sentence, and that sentence is already on the decision as `reason`.
 
 Why generation is not in the analyze path
 -----------------------------------------
-A model call takes seconds. `/engagement/analyze` runs once every ten seconds
-and is serialised per session, so blocking it on a generation would stall
-engagement detection - a working feature - behind a new one, and the stall
-would grow with the model's latency.
+A model call takes seconds. `/engagement/analyze` runs about once a second
+(a sliding window) and is serialised per session, so blocking it on a
+generation would stall engagement detection - a working feature - behind a new
+one, and the stall would grow with the model's latency.
 
 So the decision and the text are separate requests. Analyze offers the
 intervention in milliseconds; the browser then fetches the text from

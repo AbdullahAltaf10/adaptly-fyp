@@ -98,6 +98,16 @@ class Signals:
     # Read by the policy so it can offer something gentler instead; it can
     # never widen what is offered. See preferences.py.
     discouraged_types: frozenset = frozenset()
+    # Set by the paragraph-revisit re-reading proxy (engagement/rereading.py).
+    # Independent of the LSTM's raw_struggling/brow_struggling path - see
+    # policy.py for how it is used as its own, separate trigger.
+    paragraph_revisit_detected: bool = False
+    # Needed only by a decider that looks up its own additional context
+    # (Module 6's FusionPolicy reads a learner's recent chat history) - the
+    # InterventionDecider Protocol's decide() signature has no other place
+    # to carry identity. DefaultPolicy ignores both; purely additive.
+    uid: str | None = None
+    session_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -554,6 +554,72 @@ class RecoveryTests(unittest.TestCase):
         item["recovery_duration_seconds"] = 999
         recovery = calculate_recoveries([item], [], timestamp(60))[0]
         self.assertEqual(recovery["recovery_duration_seconds"], 10.0)
+
+
+def _parse(value: str) -> datetime:
+    from app.analytics.domain.metrics import _parse_datetime
+    return _parse_datetime(value)
+
+
+class ObservedRecoverySinceTests(unittest.TestCase):
+    """Pure, infrastructure-independent - like every other function in this
+    module (see the module docstring). Fetching the events is the caller's
+    job (app/intervention/service.py); this only judges evidence it is
+    handed."""
+
+    def test_observed_recovery_since_is_false_with_no_events(self) -> None:
+        from app.analytics.domain.metrics import observed_recovery_since
+
+        result = observed_recovery_since(
+            [], _parse(timestamp(0)), now=_parse(timestamp(60)),
+        )
+        self.assertFalse(result)
+
+    def test_observed_recovery_since_is_true_after_two_consecutive_focused_confirmations(self) -> None:
+        from app.analytics.domain.metrics import observed_recovery_since
+
+        events = [
+            engagement(10, "focused", event_number=1),
+            engagement(15, "focused", event_number=2),
+        ]
+        result = observed_recovery_since(
+            events, _parse(timestamp(0)), now=_parse(timestamp(60)),
+        )
+        self.assertTrue(result)
+
+    def test_observed_recovery_since_ignores_events_before_since(self) -> None:
+        """Two focused confirmations exist, but both are BEFORE `since` - they
+        must not count as recovery from a decision made after them."""
+        from app.analytics.domain.metrics import observed_recovery_since
+
+        events = [
+            engagement(0, "focused", event_number=1),
+            engagement(5, "focused", event_number=2),
+            engagement(10, "struggling", event_number=3),
+        ]
+        result = observed_recovery_since(
+            events, _parse(timestamp(8)), now=_parse(timestamp(60)),
+        )
+        self.assertFalse(result)
+
+    def test_observed_recovery_since_handles_since_in_the_future_without_raising(self) -> None:
+        """`since` at or after `now` is a degenerate but real caller mistake
+        (e.g. clock skew) - must return False, never raise."""
+        from app.analytics.domain.metrics import observed_recovery_since
+
+        result = observed_recovery_since(
+            [], _parse(timestamp(120)), now=_parse(timestamp(60)),
+        )
+        self.assertFalse(result)
+
+    def test_observed_recovery_since_defaults_now_to_the_current_time(self) -> None:
+        """`now` is optional - a caller with no test clock to inject still
+        gets a real answer, not a required-argument error."""
+        from app.analytics.domain.metrics import observed_recovery_since
+
+        since = datetime.now(timezone.utc) - timedelta(seconds=30)
+        result = observed_recovery_since([], since)
+        self.assertFalse(result)
 
 
 class InterventionTests(unittest.TestCase):

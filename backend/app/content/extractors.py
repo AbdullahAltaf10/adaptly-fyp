@@ -11,12 +11,19 @@ error reach the user. A corrupt PDF previously produced a 500 and a stack trace.
 import os
 import re
 import tempfile
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 from fastapi import HTTPException
 
-from app.content.security import MAX_DOWNLOAD_BYTES, REQUEST_TIMEOUT_SECONDS
+from app.content.security import (
+    MAX_DOWNLOAD_BYTES,
+    MAX_REDIRECTS,
+    REDIRECT_STATUSES,
+    REQUEST_TIMEOUT_SECONDS,
+    validate_public_url,
+)
 
 # A browser-like agent. Some sites return an error page or a consent wall to
 # unrecognised clients, which would otherwise be stored as the article text.
@@ -124,6 +131,46 @@ def extract_research_paper(data: bytes) -> dict:
 # Website
 # --------------------------------------------------------------------------
 
+def _fetch_following_redirects(url: str):
+    """
+    GET `url`, following redirects by hand and re-validating every hop.
+
+    `requests` follows redirects on its own, and it only ever saw the FIRST url,
+    which had passed `validate_public_url`. A public page can answer with
+    `302 Location: http://169.254.169.254/latest/meta-data/`, and the library
+    would follow it straight into the internal network - the exact request the
+    SSRF check exists to stop, arriving through the one door it did not watch.
+    So each hop is checked before it is requested, and the number of hops is
+    capped so a redirect loop cannot hold a worker.
+
+    One gap remains and is worth knowing: the name is resolved once by
+    `validate_public_url` and again by `requests`, so a host whose DNS answer
+    changes between the two (DNS rebinding) is not caught here. Closing that
+    means connecting to the validated IP itself.
+    """
+    current = url
+    for _ in range(MAX_REDIRECTS + 1):
+        response = requests.get(
+            current,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            headers={"User-Agent": _USER_AGENT},
+            stream=True,          # so the size cap applies before we buffer it all
+            allow_redirects=False,
+        )
+        if response.status_code not in REDIRECT_STATUSES:
+            return response
+
+        location = response.headers.get("location")
+        response.close()
+        if not location:
+            raise HTTPException(status_code=422, detail="That website could not be reached.")
+        # A relative Location is legal, so resolve it against the current URL
+        # before checking - the check has to see the address that will be hit.
+        current = validate_public_url(urljoin(current, location))
+
+    raise HTTPException(status_code=422, detail="That website redirected too many times.")
+
+
 def extract_website(url: str) -> tuple:
     """
     Fetch a page and pull out its readable text. Returns (title, text).
@@ -131,13 +178,7 @@ def extract_website(url: str) -> tuple:
     The URL must already have passed security.validate_public_url.
     """
     try:
-        response = requests.get(
-            url,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-            headers={"User-Agent": _USER_AGENT},
-            stream=True,          # so the size cap applies before we buffer it all
-            allow_redirects=True,
-        )
+        response = _fetch_following_redirects(url)
         response.raise_for_status()
 
         content_type = response.headers.get("content-type", "")

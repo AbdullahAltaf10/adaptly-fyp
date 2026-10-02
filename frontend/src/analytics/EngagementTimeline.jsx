@@ -18,13 +18,22 @@ import { ENGAGEMENT_STATE_LABELS } from "./labels";
  * stretching a neighboring segment or being dropped from the timeline.
  */
 
+// Reuses the app's own theme tokens where a state maps naturally onto one
+// (focused/recovered/drifting/unknown), rather than inventing a second,
+// unrelated palette just for this chart. `struggling` deliberately does NOT
+// get the alarm-adjacent hue a first instinct reaches for - `--color-danger`
+// was itself already softened to a muted clay for the same reason
+// (see index.css's design principles), so reusing it here keeps this chart
+// visually consistent with the calm-by-design rest of the app rather than
+// becoming the one place a "bad" state reads as a red flag. `fatigued` is the
+// only genuinely new hue, picked to sit in the same muted family as the rest.
 const STATE_COLORS = {
-  focused: "#0b6bcb",
-  recovered: "#2f9e5b",
-  drifting: "#e0a72e",
-  struggling: "#d9743c",
-  fatigued: "#b25b9e",
-  unknown: "#c9c9c9",
+  focused: "var(--color-accent)",
+  recovered: "var(--color-success)",
+  drifting: "var(--color-warning)",
+  struggling: "var(--color-danger)",
+  fatigued: "#8a5a9e",
+  unknown: "var(--color-line-strong)",
 };
 
 const MIN_GAP_SECONDS = 1;
@@ -117,25 +126,18 @@ export default function EngagementTimeline({
   const hasData = entries.length > 0 && Boolean(totalDurationSeconds);
 
   return (
-    <section aria-labelledby="engagement-timeline-heading">
-      <h2 id="engagement-timeline-heading">Session timeline</h2>
+    <section aria-labelledby="engagement-timeline-heading" className="mb-4">
+      <h2 id="engagement-timeline-heading" className="text-lg font-semibold mb-2">
+        Session timeline
+      </h2>
 
       {!hasData && (
-        <p>Not enough data was collected to show a timeline for this session.</p>
+        <p className="text-muted">Not enough data was collected to show a timeline for this session.</p>
       )}
 
       {hasData && (
-        <>
-          <div
-            style={{
-              position: "relative",
-              display: "flex",
-              height: "28px",
-              borderRadius: "6px",
-              overflow: "hidden",
-              border: "1px solid #ddd",
-            }}
-          >
+        <div className="rounded-card border border-line bg-surface shadow-card p-4">
+          <div className="relative flex h-7 rounded-md overflow-hidden border border-line">
             {entries.map((entry, index) => {
               const widthPercent = Math.max(
                 0,
@@ -175,23 +177,20 @@ export default function EngagementTimeline({
                   role="img"
                   aria-label={`Support offered at ${timeLabel(offsetSeconds)}`}
                   title={`Support offered at ${timeLabel(offsetSeconds)}`}
+                  className="absolute w-0 h-0 -translate-x-1/2"
                   style={{
-                    position: "absolute",
                     left: `${leftPercent}%`,
                     top: "-4px",
-                    transform: "translateX(-50%)",
-                    width: 0,
-                    height: 0,
                     borderLeft: "5px solid transparent",
                     borderRight: "5px solid transparent",
-                    borderTop: "7px solid #1a1a1a",
+                    borderTop: "7px solid var(--color-ink)",
                   }}
                 />
               );
             })}
           </div>
 
-          <ol style={{ listStyle: "none", padding: 0, margin: "0.75rem 0 0" }}>
+          <ol className="list-none p-0 m-0 mt-3 space-y-1 text-sm text-ink">
             {entries.map((entry, index) => {
               const label = entry.synthetic
                 ? ENGAGEMENT_STATE_LABELS.unknown ?? NOT_AVAILABLE
@@ -206,16 +205,18 @@ export default function EngagementTimeline({
                 );
               });
               return (
-                <li key={`${entry.state}-${entry.offsetSeconds}-${index}`} style={{ margin: "0.25rem 0", fontSize: "0.9rem" }}>
+                <li key={`${entry.state}-${entry.offsetSeconds}-${index}`}>
                   {timeLabel(entry.offsetSeconds)}–
                   {timeLabel(entry.offsetSeconds + entry.durationSeconds)}: {label} (
                   {formatDurationSeconds(entry.durationSeconds)})
-                  {supportDuring.length > 0 && " — support offered during this stretch"}
+                  {supportDuring.length > 0 && (
+                    <span className="text-muted"> — support offered during this stretch</span>
+                  )}
                 </li>
               );
             })}
           </ol>
-        </>
+        </div>
       )}
     </section>
   );

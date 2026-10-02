@@ -8,7 +8,7 @@
  * ours to decide.
  */
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import PreSessionCheck from "./PreSessionCheck";
@@ -118,6 +118,38 @@ describe("Module 2's document warnings", () => {
   it("says nothing about the document when there is nothing to say", () => {
     setup({}, { warnings: [] });
     expect(screen.queryByText(/about this document/i)).toBeNull();
+  });
+});
+
+describe("WebGazer calibration and readability suggestion", () => {
+  it("shows a skippable 'calibrate your eyes' step once the camera is ready", () => {
+    // "calibrate" alone would also match the button's own label ("Calibrate"),
+    // so this checks the descriptive copy specifically, not just any match.
+    setup({ webgazerStatus: "idle" });
+    expect(screen.getByText(/eye tracking/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /skip/i })).toBeInTheDocument();
+  });
+
+  it("does not block Start while calibration is unavailable", () => {
+    setup({ webgazerStatus: "unavailable" });
+    expect(screen.getByRole("button", { name: /start session/i })).not.toBeDisabled();
+  });
+
+  it("shows a dismissible font/line-spacing suggestion when one is present", () => {
+    const dismissReadabilitySuggestion = vi.fn();
+    setup({
+      webgazerStatus: "ready",
+      readabilitySuggestion: { fontUp: true, lineSpacingUp: false },
+      dismissReadabilitySuggestion,
+    });
+    expect(screen.getByText(/larger text might make this easier/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+    expect(dismissReadabilitySuggestion).toHaveBeenCalled();
+  });
+
+  it("never renders a suggestion when readabilitySuggestion is null", () => {
+    setup({ webgazerStatus: "ready", readabilitySuggestion: null });
+    expect(screen.queryByText(/larger text/i)).not.toBeInTheDocument();
   });
 });
 

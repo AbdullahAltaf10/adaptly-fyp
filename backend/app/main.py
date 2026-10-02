@@ -1,11 +1,23 @@
 import app.core.paths  # noqa: F401  - puts repo root on sys.path for `ml`
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.engagement.warmup import warm_models_in_background
 
-app = FastAPI(title="Adaptly API")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Returns at once: the models load on a daemon thread, so the server still
+    # accepts connections immediately. See app/engagement/warmup.py.
+    warm_models_in_background()
+    yield
+
+
+app = FastAPI(title="Adaptly API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -45,6 +45,7 @@ from app.intervention.decider import (
     BREAK_SUGGESTION,
     BULLET_SUMMARY,
     REASON_FATIGUE,
+    REASON_READING_DIFFICULTY,
     REASON_STRUGGLING,
     SIMPLIFY_CONTENT,
     TIER_BROAD,
@@ -156,6 +157,24 @@ class DefaultPolicy:
         strong = signals.raw_struggling and signals.brow_struggling
         broad = signals.raw_struggling or signals.brow_struggling
         if not broad:
+            # Independent of the engagement model entirely - the scope
+            # document itself frames re-reading detection this way ("a
+            # separate binary classifier ... independent of the engagement
+            # model"). This is the proxy version of that independence: a
+            # learner can trigger this with zero struggling/brow evidence.
+            if (
+                signals.paragraph_revisit_detected
+                and ASSISTANT_HELP_PROMPT not in signals.discouraged_types
+            ):
+                return Decision(
+                    intervention_type=ASSISTANT_HELP_PROMPT,
+                    reason_code=REASON_READING_DIFFICULTY,
+                    reason="Went back to an earlier paragraph and stayed there — offered the assistant.",
+                    tier=TIER_BROAD,
+                    chunk_id=signals.chunk_id,
+                    content_id=signals.content_id,
+                    triggering_engagement_event_id=signals.engagement_event_id,
+                )
             return None
 
         long_gate, short_gate = self.gates_for(signals)

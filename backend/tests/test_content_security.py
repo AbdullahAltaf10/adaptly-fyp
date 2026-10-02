@@ -140,3 +140,127 @@ def test_scanned_pdf_with_no_text_layer_is_refused():
 def test_usable_text_passes():
     text = "This document contains enough readable text to be worth studying properly."
     assert validate_extracted_text(text, "that PDF") == text
+
+
+# --------------------------------------------------------------------------
+# SSRF through a redirect - the check used to see only the first URL
+# --------------------------------------------------------------------------
+
+class FakeResponse:
+    def __init__(self, status=200, headers=None, body=b""):
+        self.status_code = status
+        self.headers = {"content-type": "text/html", **(headers or {})}
+        self.encoding = "utf-8"
+        self._body = body
+
+    def iter_content(self, size):
+        yield self._body
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError("http error")
+
+    def close(self):
+        pass
+
+
+@pytest.fixture
+def web(monkeypatch):
+    """A fake internet: url -> response, plus a log of every url requested."""
+    from app.content import extractors, security
+
+    routes, requested = {}, []
+
+    def fake_get(url, **kwargs):
+        requested.append(url)
+        assert kwargs.get("allow_redirects") is False, (
+            "redirects must be followed by hand, or the check never sees them"
+        )
+        return routes[url]
+
+    # Names resolve to a public address, without touching a real resolver.
+    monkeypatch.setattr(
+        security.socket, "getaddrinfo",
+        lambda host, port: [(0, 0, 0, "", ("93.184.216.34", 0))]
+        if not host.replace(".", "").isdigit() else [(0, 0, 0, "", (host, 0))],
+    )
+    monkeypatch.setattr(extractors.requests, "get", fake_get)
+    return routes, requested
+
+
+ARTICLE = b"<html><head><title>T</title></head><body><p>" + b"readable words " * 20 + b"</p></body></html>"
+
+
+def test_a_redirect_into_the_metadata_service_is_refused(web):
+    from app.content.extractors import extract_website
+
+    routes, requested = web
+    routes["http://public.test/"] = FakeResponse(
+        302, {"location": "http://169.254.169.254/latest/meta-data/"}
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        extract_website("http://public.test/")
+
+    assert exc.value.status_code == 400
+    assert requested == ["http://public.test/"], "the internal address must never be requested"
+
+
+def test_a_redirect_to_localhost_is_refused(web):
+    from app.content.extractors import extract_website
+
+    routes, requested = web
+    routes["http://public.test/"] = FakeResponse(301, {"location": "http://localhost:8000/users/directory"})
+
+    with pytest.raises(HTTPException):
+        extract_website("http://public.test/")
+    assert len(requested) == 1
+
+
+def test_a_relative_redirect_is_resolved_before_it_is_checked(web):
+    from app.content.extractors import extract_website
+
+    routes, requested = web
+    routes["http://public.test/a"] = FakeResponse(302, {"location": "/b"})
+    routes["http://public.test/b"] = FakeResponse(200, body=ARTICLE)
+
+    title, text = extract_website("http://public.test/a")
+
+    assert requested == ["http://public.test/a", "http://public.test/b"]
+    assert "readable words" in text
+
+
+def test_an_ordinary_redirect_to_another_public_page_still_works(web):
+    from app.content.extractors import extract_website
+
+    routes, requested = web
+    routes["http://old.test/"] = FakeResponse(301, {"location": "https://new.test/article"})
+    routes["https://new.test/article"] = FakeResponse(200, body=ARTICLE)
+
+    _, text = extract_website("http://old.test/")
+    assert "readable words" in text
+
+
+def test_a_redirect_loop_gives_up_instead_of_holding_a_worker(web):
+    from app.content.extractors import extract_website
+    from app.content.security import MAX_REDIRECTS
+
+    routes, requested = web
+    routes["http://loop.test/"] = FakeResponse(302, {"location": "http://loop.test/"})
+
+    with pytest.raises(HTTPException) as exc:
+        extract_website("http://loop.test/")
+
+    assert exc.value.status_code == 422
+    assert len(requested) == MAX_REDIRECTS + 1
+
+
+def test_a_redirect_with_no_location_is_an_error_not_a_crash(web):
+    from app.content.extractors import extract_website
+
+    routes, _ = web
+    routes["http://odd.test/"] = FakeResponse(302, {})
+
+    with pytest.raises(HTTPException) as exc:
+        extract_website("http://odd.test/")
+    assert exc.value.status_code == 422

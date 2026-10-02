@@ -1,3 +1,5 @@
+import { Mic, MicOff } from "lucide-react";
+
 export function VoiceInputButton({
   isSupported,
   isListening,
@@ -8,26 +10,44 @@ export function VoiceInputButton({
   disabled,
 }) {
   if (!isSupported) {
-    return <p className="voice-notice">Voice input is not supported in this browser.</p>;
+    return (
+      <p className="text-xs text-muted m-0">
+        Voice input is not supported in this browser.
+      </p>
+    );
   }
 
   return (
-    <div className="voice-input">
+    <div className="flex flex-wrap items-center gap-2 mt-1">
       <button
         type="button"
-        className="voice-input__button"
         onClick={isListening ? onStop : onStart}
         disabled={disabled}
         aria-label={isListening ? "Stop listening" : "Speak your question"}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium
+                    transition-colors duration-150 disabled:opacity-60 disabled:cursor-not-allowed ${
+                      isListening
+                        ? "bg-danger-soft border-danger/40 text-danger"
+                        : "bg-surface border-line-strong text-ink hover:bg-page"
+                    }`}
       >
-        {isListening ? "Stop listening" : "Speak"}
+        {isListening ? (
+          <MicOff size={14} strokeWidth={1.75} aria-hidden="true" />
+        ) : (
+          <Mic size={14} strokeWidth={1.75} aria-hidden="true" />
+        )}
+        {isListening ? "Stop listening" : "Speak your question"}
       </button>
       {isListening && (
-        <span className="voice-notice" role="status">
+        <span className="text-xs text-muted" role="status">
           Listening...{interimTranscript ? ` ${interimTranscript}` : ""}
         </span>
       )}
-      {error && <p className="voice-error" role="status">{error}</p>}
+      {error && (
+        <p className="text-xs text-danger m-0" role="status">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

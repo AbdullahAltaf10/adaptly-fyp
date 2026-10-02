@@ -14,10 +14,12 @@
  * what was stored, so a preview is never mistaken for a commitment.
  */
 
+import { AlignJustify, Contrast, Focus, Type } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "./AuthContext";
+import SecuritySettings from "./SecuritySettings";
 import {
   DEFAULT_ACCESSIBILITY,
   FONT_CHOICES,
@@ -79,7 +81,15 @@ export default function SettingsPage() {
         {status && <Alert tone={status.tone}>{status.message}</Alert>}
 
         <form onSubmit={handleSave} noValidate>
-          <Field label="Font" hint="All of these are already on your device, so nothing has to load.">
+          <Field
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                <Type size={15} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                Font
+              </span>
+            }
+            hint="OpenDyslexic has weighted letter bottoms that make letters harder to flip. It downloads once, only if you choose it."
+          >
             {(aria) => (
               <Select
                 {...aria}
@@ -95,18 +105,32 @@ export default function SettingsPage() {
             )}
           </Field>
 
-          <Field label="Line spacing" hint="More space between lines helps if text runs together.">
+          <Field
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                <AlignJustify size={15} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                Line spacing
+              </span>
+            }
+            hint="More space between lines helps if text runs together."
+          >
             {(aria) => (
               <Select
                 {...aria}
-                value={draft.line_spacing}
-                onChange={(e) => update("line_spacing", e.target.value)}
+                value={String(draft.line_spacing)}
+                // The contract stores a number, and <select> hands back a string.
+                onChange={(e) => update("line_spacing", Number(e.target.value))}
               >
-                {Object.entries(LINE_SPACING_CHOICES).map(([value, { label }]) => (
-                  <option key={value} value={value}>
+                {LINE_SPACING_CHOICES.map(({ value, label }) => (
+                  <option key={value} value={String(value)}>
                     {label}
                   </option>
                 ))}
+                {/* A number set elsewhere, inside the contract's range but not
+                    one of the presets, still has to show as what it is. */}
+                {!LINE_SPACING_CHOICES.some(({ value }) => value === draft.line_spacing) && (
+                  <option value={String(draft.line_spacing)}>Custom ({draft.line_spacing})</option>
+                )}
               </Select>
             )}
           </Field>
@@ -122,7 +146,10 @@ export default function SettingsPage() {
                 onChange={(e) => update("high_contrast", e.target.checked)}
               />
               <span>
-                <span className="block font-medium">High contrast</span>
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Contrast size={15} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                  High contrast
+                </span>
                 <span className="block text-sm text-muted">
                   Maximum separation between text and background.
                 </span>
@@ -137,7 +164,10 @@ export default function SettingsPage() {
                 onChange={(e) => update("focus_isolation", e.target.checked)}
               />
               <span>
-                <span className="block font-medium">Focus isolation</span>
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Focus size={15} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                  Focus isolation
+                </span>
                 <span className="block text-sm text-muted">
                   Dim everything except the section you are reading.
                 </span>
@@ -163,6 +193,8 @@ export default function SettingsPage() {
           </div>
         </form>
       </Card>
+
+      <SecuritySettings />
     </div>
   );
 }
