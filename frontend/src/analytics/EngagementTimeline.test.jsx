@@ -108,3 +108,19 @@ describe("EngagementTimeline", () => {
     expect(screen.getByRole("img", { name: /^Not measured, 1m to 2m/ })).toBeInTheDocument();
   });
 });
+
+describe("EngagementTimeline with nothing measured", () => {
+  it("shows the empty-state message rather than one whole-session 'Not measured' block", () => {
+    render(
+      <EngagementTimeline
+        segments={[
+          { state: "unknown", started_at: "2026-10-04T10:00:00Z", ended_at: "2026-10-04T10:01:03Z" },
+        ]}
+        interventions={[]}
+        totalDurationSeconds={63}
+        sessionStartIso="2026-10-04T10:00:00Z"
+      />
+    );
+    expect(screen.getByText(/not enough data was collected to show a timeline/i)).toBeInTheDocument();
+  });
+});

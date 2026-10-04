@@ -410,6 +410,7 @@ def test_an_unreachable_database_is_reported_not_raised(fake_store):
 def test_an_offered_intervention_is_stored_before_it_is_returned(fake_store):
     result = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False, engagement_event_id="e1",
     )
     assert result["intervention"] is not None
@@ -426,12 +427,14 @@ def test_the_event_names_the_model_that_actually_produced_the_trigger(fake_store
     """
     plain = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False, engagement_event_id="e1",
         calibrated=False,
     )
     cooldown.reset("u1", "s1")
     calibrated = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False, engagement_event_id="e2",
         calibrated=True,
     )
@@ -465,6 +468,7 @@ def test_nothing_is_offered_if_it_could_not_be_stored(fake_store):
     fake_store.fail = True
     result = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=True, engagement_event_id="e1",
     )
     assert result["intervention"] is None
@@ -475,10 +479,12 @@ def test_nothing_is_offered_if_it_could_not_be_stored(fake_store):
 def test_the_second_window_is_silent_while_the_first_is_still_being_measured(fake_store):
     first = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )
     second = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )
     assert first["intervention"] is not None
@@ -514,7 +520,7 @@ def test_dwell_from_the_browser_is_bounded_not_trusted(fake_store):
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
         raw_struggling=True, brow_struggling=True, dwell_seconds=-500.0,
     )
-    assert negative["intervention"]["intervention_type"] == ASSISTANT_HELP_PROMPT
+    assert negative["intervention"] is None  # clamped to 0 s: below the minimum dwell
 
 
 def test_a_failed_delivery_gives_the_quiet_period_back(fake_store):
@@ -524,6 +530,7 @@ def test_a_failed_delivery_gives_the_quiet_period_back(fake_store):
     """
     offered = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )["intervention"]
     service.update_status("u1", "s1", offered["intervention_id"], "failed")
@@ -534,6 +541,7 @@ def test_a_dismissal_does_not(fake_store):
     """They saw it and said no. Asking again at once is what cooldown is for."""
     offered = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )["intervention"]
     service.update_status("u1", "s1", offered["intervention_id"], "displayed")
@@ -545,6 +553,7 @@ def test_repeating_the_current_status_is_not_an_error(fake_store):
     """A client retrying after a dropped response is behaving correctly."""
     offered = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )["intervention"]
     once = service.update_status("u1", "s1", offered["intervention_id"], "displayed")
@@ -555,6 +564,7 @@ def test_repeating_the_current_status_is_not_an_error(fake_store):
 def test_one_learner_cannot_report_delivery_for_another(fake_store):
     offered = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )["intervention"]
     with pytest.raises(LookupError):
@@ -564,6 +574,7 @@ def test_one_learner_cannot_report_delivery_for_another(fake_store):
 def test_ending_a_session_clears_its_quiet_period(fake_store):
     service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )
     assert cooldown.is_cooling("u1", "s1") is True
@@ -626,6 +637,7 @@ def test_recovery_is_passed_to_the_decider_when_a_prior_decision_exists_this_ses
         # recovered FROM yet.
         service.evaluate(
             "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+            dwell_seconds=20.0,
             raw_struggling=True, brow_struggling=False,
         )
         assert seen[-1] is None
@@ -639,6 +651,7 @@ def test_recovery_is_passed_to_the_decider_when_a_prior_decision_exists_this_ses
         # must be computed (and here, per the monkeypatched function, is True).
         service.evaluate(
             "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+            dwell_seconds=20.0,
             raw_struggling=True, brow_struggling=False,
         )
         assert seen[-1] is True
@@ -727,6 +740,7 @@ def test_an_illegal_move_is_a_conflict_not_a_retry(fake_store):
     as_user()
     offered = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )["intervention"]
     response = client.post(
@@ -752,6 +766,7 @@ def test_somebody_elses_intervention_is_also_a_404(fake_store):
     """
     offered = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )["intervention"]
     as_user("u2")
@@ -766,6 +781,7 @@ def test_a_status_that_is_not_a_status_is_unprocessable(fake_store):
     as_user()
     offered = service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )["intervention"]
     response = client.post(
@@ -778,10 +794,12 @@ def test_a_status_that_is_not_a_status_is_unprocessable(fake_store):
 def test_the_session_list_shows_only_your_own(fake_store):
     service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )
     service.evaluate(
         "u2", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )
     as_user("u1")
@@ -792,6 +810,7 @@ def test_the_session_list_shows_only_your_own(fake_store):
 def test_the_session_list_carries_no_scores(fake_store):
     service.evaluate(
         "u1", "s1", state="struggling", source="lstm", confidence=0.7,
+        dwell_seconds=20.0,
         raw_struggling=True, brow_struggling=False,
     )
     as_user()
@@ -866,15 +885,17 @@ def test_analyze_offers_an_intervention_and_it_can_be_delivered(monkeypatch, stu
     _furrowed(monkeypatch, True)
     engagement_routes.session_state.start("u1", "s1")
 
-    body = client.post("/engagement/analyze", json=stubbed_window).json()
+    body = client.post(
+        "/engagement/analyze", json={**stubbed_window, "dwell_seconds": 20.0}
+    ).json()
     offered = body["intervention"]
     assert offered is not None, body["diagnostics"]["intervention"]
-    assert offered["intervention_type"] == ASSISTANT_HELP_PROMPT
+    assert offered["intervention_type"] == BULLET_SUMMARY
 
     url = f"/intervention/{offered['intervention_id']}/status"
     shown = client.post(url, json={"session_id": "s1", "delivery_status": "displayed"}).json()
-    assert shown["starts_recovery_measurement"] is False, (
-        "rendering it is not enough for a learner-initiated type"
+    assert shown["starts_recovery_measurement"] is True, (
+        "a bullet summary is automatic: displaying it starts the measurement"
     )
 
     taken = client.post(url, json={"session_id": "s1", "delivery_status": "accepted"}).json()
@@ -882,7 +903,6 @@ def test_analyze_offers_an_intervention_and_it_can_be_delivered(monkeypatch, stu
 
 
 @pytest.mark.parametrize("dwell, expected, measured_at", [
-    (0.0, ASSISTANT_HELP_PROMPT, "accepted"),
     (30.0, BULLET_SUMMARY, "displayed"),
     (90.0, SIMPLIFY_CONTENT, "displayed"),
 ])
@@ -965,18 +985,17 @@ def test_a_window_with_no_difficulty_offers_nothing(monkeypatch, stubbed_window)
     assert body["diagnostics"]["intervention"] == "no intervention warranted"
 
 
-def test_without_dwell_the_intrusive_responses_never_fire(monkeypatch, stubbed_window):
+def test_without_dwell_nothing_is_offered_for_struggling(monkeypatch, stubbed_window):
     """
-    Nothing sends dwell until the content viewer exists (issue #12), so it is
-    0 and the dwell-gated responses stay out of reach. That is the right
-    failure: no dwell evidence, no dwell-based intervention.
+    Audit 2026-10-04: with no dwell (0 s) a struggling window offers nothing,
+    because even the cheapest prompt now needs the minimum dwell.
     """
     as_user()
     _furrowed(monkeypatch, True)
     engagement_routes.session_state.start("u1", "s1")
 
     body = client.post("/engagement/analyze", json=stubbed_window).json()
-    assert body["intervention"]["intervention_type"] == ASSISTANT_HELP_PROMPT
+    assert body["intervention"] is None
 
 
 def test_dwell_from_the_viewer_unlocks_them(monkeypatch, stubbed_window):
@@ -1064,7 +1083,7 @@ def test_ending_the_session_through_the_endpoint_clears_the_quiet_period(
     as_user()
     _furrowed(monkeypatch, True)
     engagement_routes.session_state.start("u1", "s1")
-    client.post("/engagement/analyze", json=stubbed_window)
+    client.post("/engagement/analyze", json={**stubbed_window, "dwell_seconds": 20.0})
     assert cooldown.is_cooling("u1", "s1") is True
 
     client.post("/engagement/session/end", json={"session_id": "s1"})

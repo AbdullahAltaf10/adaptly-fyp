@@ -144,8 +144,12 @@ export function useEngagementCapture({
       }
       inFlightRef.current = true;
       try {
+        // Read at send time: calibration replaces the session id, and a
+        // window sent with the id captured at effect start was recorded
+        // against a session that had already ended - so the session that
+        // analytics shows had no engagement events at all.
         const res = await analyze(frames, {
-          sessionId,
+          sessionId: sessionIdRef.current,
           contentId,
           chunkId: chunkGetterRef.current?.() ?? chunkFallbackRef.current ?? null,
           dwellSeconds: dwellRef.current?.() ?? 0,
@@ -304,7 +308,7 @@ export function useEngagementCapture({
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ session_id: sessionId }),
+            body: JSON.stringify({ session_id: sessionIdRef.current }),
           });
         })
         .catch(() => {});
@@ -334,7 +338,7 @@ export function useEngagementCapture({
       // first and awaited there) and an ordinary React unmount (navigating
       // elsewhere in the app). Idempotent on the backend, so overlapping with
       // an explicit call above costs nothing.
-      endSession(sessionId).catch(() => {});
+      endSession(sessionIdRef.current).catch(() => {});
     };
   }, [active, contentId]);
 

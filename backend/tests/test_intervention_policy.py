@@ -118,12 +118,12 @@ def test_brow_signal_alone_still_counts():
     assert decision.intervention_type == BULLET_SUMMARY
 
 
-def test_no_dwell_gives_the_cheapest_response():
-    """With no dwell signal at all, only the free response is justified."""
+def test_no_dwell_gives_no_struggling_response():
+    """Audit 2026-10-04: a single struggling window with no dwell offers nothing."""
     decision = DefaultPolicy().decide(
         signals(raw_struggling=True, brow_struggling=True, dwell_seconds=0.0)
     )
-    assert decision.intervention_type == ASSISTANT_HELP_PROMPT
+    assert decision is None
 
 
 # --------------------------------------------------------------------------
@@ -172,10 +172,13 @@ def test_thresholds_are_parameters_not_constants():
     constants would force a signature change then.
     """
     strict = DefaultPolicy(dwell_long=600.0, dwell_short=300.0)
-    decision = strict.decide(
+    assert strict.decide(
         signals(raw_struggling=True, brow_struggling=True, dwell_seconds=60.0)
+    ) is None
+    decision = strict.decide(
+        signals(raw_struggling=True, brow_struggling=True, dwell_seconds=350.0)
     )
-    assert decision.intervention_type == ASSISTANT_HELP_PROMPT
+    assert decision.intervention_type == BULLET_SUMMARY
 
 
 def test_nonsense_configuration_is_rejected_at_construction():
@@ -201,7 +204,7 @@ def test_decision_rejects_values_the_contract_would_reject():
 
 @pytest.mark.parametrize("raw,brow,dwell", [
     (True, True, 60.0), (True, True, 20.0), (True, False, 60.0),
-    (False, True, 5.0), (True, True, 0.0),
+    (False, True, 20.0), (True, True, 25.0),
 ])
 def test_every_decision_carries_a_reason_and_valid_ids(raw, brow, dwell):
     """Module 8's dashboard shows "the reason for each one" - it cannot be blank."""

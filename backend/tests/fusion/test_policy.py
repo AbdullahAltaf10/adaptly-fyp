@@ -126,13 +126,13 @@ def test_recovered_state_stays_quiet_like_default_policy(monkeypatch):
 def test_escalates_through_sequencing_when_the_same_type_would_repeat(monkeypatch):
     policy = FusionPolicy()
     monkeypatch.setattr("app.fusion.policy.build_fusion_signals", _StubBuildFusionSignals([], 0))
-    quiet_signals = _signals(raw_struggling=False, brow_struggling=True, dwell_seconds=0.0)  # -> assistant_help_prompt via DefaultPolicy's broad tier
+    quiet_signals = _signals(raw_struggling=False, brow_struggling=True, dwell_seconds=20.0)  # -> bullet_summary via DefaultPolicy's broad tier
     history = [{
-        "intervention_type": ASSISTANT_HELP_PROMPT, "sequence_id": "seq-1", "step_index": 0,
+        "intervention_type": BULLET_SUMMARY, "sequence_id": "seq-1", "step_index": 0,
     }]
     result = policy.decide(quiet_signals, history=history, recovery=False)
     assert result is not None
-    assert result.intervention_type == BULLET_SUMMARY
+    assert result.intervention_type == SIMPLIFY_CONTENT
     assert result.sequence_id == "seq-1"
     assert result.step_index == 1
 

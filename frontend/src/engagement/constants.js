@@ -21,8 +21,11 @@ export const CAPTURE_INTERVAL_MS = 1000;
 export const MIN_VALID_FRAMES = 7;
 
 /** Frames sampled during calibration, and the gap between them. */
-export const CALIBRATION_FRAMES = 10;
-export const CALIBRATION_INTERVAL_MS = 300;
+// Audit 2026-10-04: 15 s of frames, not 3 s. The model was trained against
+// baselines built from many frames of a focused learner, and a 3 s baseline
+// is far noisier. The cost is 15 s added to session start.
+export const CALIBRATION_FRAMES = 15;
+export const CALIBRATION_INTERVAL_MS = 1000;
 
 /**
  * MediaPipe drops the occasional frame even when nobody has moved, so the

@@ -65,10 +65,12 @@ def build_fallback_report(summary: dict[str, Any]) -> str:
             "A single longest focused period could not be identified from the data collected."
         )
 
-    if total_support == 0:
+    if total_support == 0 and sufficient:
         sentences.append(
             "No extra support was offered during this session — you were on track throughout."
         )
+    elif total_support == 0:
+        sentences.append("No extra support was offered during this session.")
     else:
         support_sentence = (
             f"Support was offered {total_support} time{'s' if total_support != 1 else ''} "

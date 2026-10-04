@@ -29,21 +29,12 @@ def _repositories():
 def create_session_safely(uid: str, session_id: str, content_id: str | None) -> None:
     """Create (or refresh) Module 8's own session record at session start.
 
-    No-ops when ``content_id`` is missing. Module 8's session contract
-    (``shared/contracts/session.schema.json``) requires ``content_id``, so a
-    record without one would violate the same contract Module 8's own
-    finalization already treats as authoritative -- silently writing an
-    invalid record would just move today's "no record exists" gap into
-    a "an invalid record exists" gap.
-
-    ``/engagement/session/start``'s request body does not send
-    ``content_id`` on develop today; this only takes effect once the
-    frontend is updated to send it (see the linked issue's "Known
-    limitation").
+    ``content_id`` is None for a camera-only session (the "Study session"
+    menu item, which has no document). Such sessions are still the learner's
+    sessions, so they get a record too; shared/contracts/session.schema.json
+    allows a null content_id for exactly this case.
     """
 
-    if not content_id:
-        return
     try:
         from app.analytics.persistence.base import format_timestamp, utc_now
 
@@ -53,7 +44,7 @@ def create_session_safely(uid: str, session_id: str, content_id: str | None) -> 
                 "schema_version": "1.0",
                 "session_id": session_id,
                 "user_id": uid,
-                "content_id": content_id,
+                "content_id": content_id or None,
                 "status": "active",
                 "started_at": format_timestamp(utc_now()),
             }

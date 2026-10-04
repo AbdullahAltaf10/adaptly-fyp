@@ -123,7 +123,10 @@ export default function EngagementTimeline({
     totalDurationSeconds,
     sessionStartIso
   );
-  const hasData = entries.length > 0 && Boolean(totalDurationSeconds);
+  // A timeline made only of "unknown" segments measured nothing: showing it
+  // as a full grey block reads as a result, so it gets the empty-state copy.
+  const measuredSegments = (segments ?? []).filter((segment) => segment.state && segment.state !== "unknown");
+  const hasData = measuredSegments.length > 0 && entries.length > 0 && Boolean(totalDurationSeconds);
 
   return (
     <section aria-labelledby="engagement-timeline-heading" className="mb-4">

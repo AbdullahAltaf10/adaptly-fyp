@@ -88,3 +88,49 @@ export function computeDashboardStats(items, { now = new Date() } = {}) {
     documentsCovered: contentIds.size,
   };
 }
+
+function focusedPercentageOf(item) {
+  const value = item?.engagement_distribution?.focused?.percentage;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Focused percentage per session, oldest first, for the trend chart. Sessions
+ * with no focus figure are skipped rather than plotted as zero.
+ */
+export function focusTrend(items, limit = 10) {
+  const points = (items ?? [])
+    .map((item) => ({
+      sessionId: item.session_id,
+      completedAt: item.completed_at,
+      focused: focusedPercentageOf(item),
+    }))
+    .filter((point) => point.focused !== null && !Number.isNaN(Date.parse(point.completedAt ?? "")))
+    .sort((a, b) => Date.parse(a.completedAt) - Date.parse(b.completedAt));
+  return points.slice(-limit);
+}
+
+/**
+ * The most recent session, summarised for the home screen. Interventions are
+ * counted from the session's own metrics, so they show what was actually
+ * offered, and of which type.
+ */
+export function latestSessionSummary(items) {
+  const dated = (items ?? []).filter((item) => !Number.isNaN(Date.parse(item.completed_at ?? "")));
+  if (dated.length === 0) return null;
+  const latest = dated.reduce((a, b) => (Date.parse(b.completed_at) > Date.parse(a.completed_at) ? b : a));
+
+  const byType = {};
+  for (const entry of latest.intervention_metrics?.by_type ?? []) {
+    byType[entry.intervention_type] = entry.total_count ?? 0;
+  }
+  return {
+    sessionId: latest.session_id,
+    completedAt: latest.completed_at,
+    durationSeconds: latest.duration_seconds ?? null,
+    focusedPercentage: focusedPercentageOf(latest),
+    longestFocusedSeconds: latest.longest_focused_period?.duration_seconds ?? null,
+    interventionTotal: Object.values(byType).reduce((sum, n) => sum + n, 0),
+    interventionsByType: byType,
+  };
+}

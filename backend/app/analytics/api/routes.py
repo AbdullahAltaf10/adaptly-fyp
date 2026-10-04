@@ -169,6 +169,19 @@ def _placeholder_learning_profile(user_id: str) -> dict[str, Any]:
     }
 
 
+INTERVENTION_ROW_FIELDS = ("timestamp", "intervention_type", "reason", "delivery_status", "outcome", "helped")
+
+
+def _intervention_rows(events):
+    """Per-intervention rows for the session log, in time order.
+
+    Built from the live intervention events so the log shows each offer as it
+    happened (which type, why, and what came of it), not only the totals.
+    """
+    rows = [{field: event.get(field) for field in INTERVENTION_ROW_FIELDS} for event in events]
+    return sorted(rows, key=lambda row: row["timestamp"] or "")
+
+
 @router.get("/api/sessions/{session_id}/analytics")
 def get_session_analytics(
     session_id: str,
@@ -184,6 +197,9 @@ def get_session_analytics(
         "status": summary_document["insight_report_status"],
         "report_text": report["report_text"] if report else None,
     }
+    response["interventions"] = _intervention_rows(
+        repositories.intervention_events.list_by_session(session_id)
+    )
     return response
 
 

@@ -16,18 +16,23 @@ vi.mock("../auth/AuthContext", () => ({ useAuth: () => authState }));
 
 import DashboardPage from "./DashboardPage";
 
+// Fixture dates are relative to now. Fixed dates made "this week" drift out of
+// range as the calendar moved on, so this test failed on any later date.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const daysAgo = (n) => new Date(Date.now() - n * DAY_MS).toISOString();
+
 const HISTORY = {
   items: [
     {
       session_id: "s-1",
-      completed_at: "2026-09-27T09:00:00Z",
+      completed_at: daysAgo(1),
       duration_seconds: 900,
       content_id: "c-1",
       engagement_distribution: { focused: { percentage: 72 } },
     },
     {
       session_id: "s-2",
-      completed_at: "2026-09-26T09:00:00Z",
+      completed_at: daysAgo(2),
       duration_seconds: 600,
       content_id: "c-2",
       engagement_distribution: { focused: { percentage: 50 } },
@@ -99,5 +104,58 @@ describe("DashboardPage", () => {
       "href",
       "/library"
     );
+  });
+});
+
+describe("DashboardPage enhancements", () => {
+  const RICH = {
+    items: [
+      {
+        session_id: "s-new",
+        completed_at: new Date(Date.now() - 1 * DAY_MS).toISOString(),
+        duration_seconds: 900,
+        content_id: "c-1",
+        engagement_distribution: { focused: { percentage: 72 } },
+        longest_focused_period: { duration_seconds: 300 },
+        intervention_metrics: {
+          by_type: [
+            { intervention_type: "bullet_summary", total_count: 2 },
+            { intervention_type: "simplify_content", total_count: 1 },
+          ],
+        },
+      },
+      {
+        session_id: "s-old",
+        completed_at: new Date(Date.now() - 3 * DAY_MS).toISOString(),
+        duration_seconds: 600,
+        content_id: null,
+        engagement_distribution: { focused: { percentage: 40 } },
+      },
+    ],
+    pagination: { limit: 30, offset: 0, returned_count: 2, total_count: 2 },
+  };
+
+  it("summarises the latest session with its focus and interventions by type", async () => {
+    draw(vi.fn().mockResolvedValue(RICH));
+
+    const card = await screen.findByRole("region", { name: /latest session/i });
+    expect(card).toHaveTextContent("72%");
+    expect(card).toHaveTextContent("Quick summary");
+    expect(card).toHaveTextContent("3");
+  });
+
+  it("draws a focus trend with one labelled bar per session", async () => {
+    draw(vi.fn().mockResolvedValue(RICH));
+
+    const trend = await screen.findByRole("img", { name: /focus trend/i });
+    expect(trend).toHaveAccessibleName(/2 sessions/i);
+    expect(trend.querySelectorAll("[data-focus-bar]")).toHaveLength(2);
+  });
+
+  it("shows how many interventions each recent session had", async () => {
+    draw(vi.fn().mockResolvedValue(RICH));
+
+    await screen.findByText(/recent sessions/i);
+    expect(screen.getByText(/3 interventions/i)).toBeInTheDocument();
   });
 });

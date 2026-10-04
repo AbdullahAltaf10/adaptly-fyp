@@ -88,11 +88,12 @@ export function fetchSessionAnalytics(sessionId) {
   return api
     .get(`/api/sessions/${sessionId}/analytics`)
     .then((response) => {
-      const { insight_report: insightReport, ...summary } = response.data;
+      const { insight_report: insightReport, interventions, ...summary } = response.data;
       return {
         overview: { session_status: "completed" },
         summary,
         insightReport: insightReport ?? { status: "pending", report_text: null },
+        interventions: Array.isArray(interventions) ? interventions : [],
       };
     })
     .catch((err) => {

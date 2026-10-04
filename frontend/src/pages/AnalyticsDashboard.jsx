@@ -33,6 +33,7 @@ import InsightReport from "../analytics/InsightReport";
 import InterventionLog from "../analytics/InterventionLog";
 import InterventionSection from "../analytics/InterventionSection";
 import LoadingState from "../analytics/LoadingState";
+import { isEngagementMeasured } from "../analytics/EngagementSection";
 import SessionOverview from "../analytics/SessionOverview";
 import SummaryCard from "../analytics/SummaryCard";
 import { useSessionAnalytics } from "../analytics/useSessionAnalytics";
@@ -127,7 +128,10 @@ export default function AnalyticsDashboard({
             totalDurationSeconds={data.summary.duration_seconds}
             sessionStartIso={computeSessionStartIso(data.summary)}
           />
-          <InterventionSection interventionMetrics={data.summary.intervention_metrics} />
+          <InterventionSection
+            interventionMetrics={data.summary.intervention_metrics}
+            engagementMeasured={isEngagementMeasured(data.summary.engagement_distribution)}
+          />
           <InterventionLog
             interventions={data.interventions}
             sessionStartIso={computeSessionStartIso(data.summary)}

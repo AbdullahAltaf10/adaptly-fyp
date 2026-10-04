@@ -72,6 +72,8 @@ POLICY_VERSION = "v2-tiered-personalised"
 # nothing in ml/evaluation/ can justify a number here. They need tuning against
 # real sessions once a content viewer exists, and should be treated as
 # provisional until then.
+DISPLAYED_BAD_STATES = ("drifting", "struggling")
+
 DEFAULT_DWELL_LONG = 45.0
 DEFAULT_DWELL_SHORT = 15.0
 
@@ -177,6 +179,13 @@ class DefaultPolicy:
                 )
             return None
 
+        # Audit 2026-10-04: the raw per-window flags are the trigger, but a
+        # learner whose displayed state is focused must not receive a
+        # struggling-based response. Only the paragraph-revisit path above
+        # is independent of the displayed state.
+        if signals.state not in DISPLAYED_BAD_STATES:
+            return None
+
         long_gate, short_gate = self.gates_for(signals)
 
         # Rewriting what somebody is reading is the most intrusive thing this
@@ -218,7 +227,10 @@ class DefaultPolicy:
                 triggering_engagement_event_id=signals.engagement_event_id,
             )
 
-        # Cheapest response, so it takes the weakest evidence and no dwell gate.
+        # Audit 2026-10-04: the assistant prompt needs the same minimum dwell as
+        # the bullet summary, so a single struggling window does not trigger it.
+        if signals.dwell_seconds < short_gate:
+            return None
         return Decision(
             intervention_type=ASSISTANT_HELP_PROMPT,
             reason_code=REASON_STRUGGLING,

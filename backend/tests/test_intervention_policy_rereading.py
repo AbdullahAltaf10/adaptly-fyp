@@ -35,7 +35,7 @@ def test_struggling_evidence_still_wins_over_a_simultaneous_revisit():
     # must not downgrade an already-earned stronger response.
     policy = DefaultPolicy()
     decision = policy.decide(
-        _signals(raw_struggling=True, brow_struggling=True, dwell_seconds=999, paragraph_revisit_detected=True)
+        _signals(state="struggling", raw_struggling=True, brow_struggling=True, dwell_seconds=999, paragraph_revisit_detected=True)
     )
     assert decision.reason_code != REASON_READING_DIFFICULTY
 

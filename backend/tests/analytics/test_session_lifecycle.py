@@ -29,12 +29,18 @@ class CreateSessionSafelyTests(unittest.TestCase):
         self.assertEqual(stored["status"], "active")
         self.assertIn("started_at", stored)
 
-    def test_no_ops_when_content_id_is_missing(self):
+    def test_creates_a_record_for_a_camera_only_session_with_no_document(self):
+        # Sessions started from the menu have no document. They are still the
+        # learner's sessions and must reach analytics, so the record is created
+        # with content_id None rather than silently skipped.
         repositories = _repositories()
         with patch.object(session_lifecycle, "_repositories", return_value=repositories):
             session_lifecycle.create_session_safely("user-1", "session-1", None)
 
-        self.assertIsNone(repositories.sessions.get("session-1"))
+        stored = repositories.sessions.get("session-1")
+        self.assertIsNotNone(stored)
+        self.assertIsNone(stored["content_id"])
+        self.assertEqual(stored["user_id"], "user-1")
 
     def test_swallows_any_error_instead_of_raising(self):
         with patch.object(
@@ -90,3 +96,22 @@ class FinalizeSessionSafelyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CameraOnlySessionReachesAnalyticsTests(unittest.TestCase):
+    def test_a_camera_only_session_is_finalized_and_listed_in_history(self):
+        from app.analytics.service.finalization import finalize_session
+
+        repositories = _repositories()
+        with patch.object(session_lifecycle, "_repositories", return_value=repositories):
+            session_lifecycle.create_session_safely("user-1", "session-cam", None)
+
+        result = finalize_session("session-cam", "user-1", repositories)
+        self.assertIn(result.outcome, ("finalized", "already_finalized"))
+
+        items, total = repositories.session_analytics.list_by_user_page(
+            "user-1", limit=20, offset=0
+        )
+        self.assertEqual(total, 1)
+        self.assertEqual(items[0]["session_id"], "session-cam")
+        self.assertIsNone(items[0]["content_id"])

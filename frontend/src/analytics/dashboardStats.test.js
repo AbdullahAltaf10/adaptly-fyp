@@ -93,3 +93,63 @@ describe("computeDashboardStats", () => {
     expect(stats.documentsCovered).toBe(2);
   });
 });
+
+import { focusTrend, latestSessionSummary } from "./dashboardStats";
+
+describe("focusTrend", () => {
+  it("returns focused percentages oldest to newest, skipping sessions with no focus figure", () => {
+    const items = [
+      { session_id: "a", completed_at: "2026-10-04T09:00:00Z", engagement_distribution: { focused: { percentage: 60 } } },
+      { session_id: "b", completed_at: "2026-10-02T09:00:00Z", engagement_distribution: { focused: { percentage: 40 } } },
+      { session_id: "c", completed_at: "2026-10-03T09:00:00Z", engagement_distribution: {} },
+    ];
+    expect(focusTrend(items).map((p) => p.focused)).toEqual([40, 60]);
+  });
+
+  it("keeps only the most recent sessions up to the limit", () => {
+    const items = Array.from({ length: 12 }, (_, i) => ({
+      session_id: `s${i}`,
+      completed_at: new Date(Date.UTC(2026, 9, i + 1)).toISOString(),
+      engagement_distribution: { focused: { percentage: i } },
+    }));
+    const trend = focusTrend(items, 10);
+    expect(trend).toHaveLength(10);
+    expect(trend[9].focused).toBe(11);
+  });
+});
+
+describe("latestSessionSummary", () => {
+  it("is null when there are no sessions", () => {
+    expect(latestSessionSummary([])).toBeNull();
+  });
+
+  it("summarises the most recent session, including its interventions by type", () => {
+    const items = [
+      {
+        session_id: "old",
+        completed_at: "2026-10-01T09:00:00Z",
+        duration_seconds: 100,
+        engagement_distribution: { focused: { percentage: 10 } },
+      },
+      {
+        session_id: "new",
+        completed_at: "2026-10-04T09:00:00Z",
+        duration_seconds: 900,
+        engagement_distribution: { focused: { percentage: 72 } },
+        longest_focused_period: { duration_seconds: 300 },
+        intervention_metrics: {
+          by_type: [
+            { intervention_type: "bullet_summary", total_count: 2 },
+            { intervention_type: "simplify_content", total_count: 1 },
+          ],
+        },
+      },
+    ];
+    const latest = latestSessionSummary(items);
+    expect(latest.sessionId).toBe("new");
+    expect(latest.focusedPercentage).toBe(72);
+    expect(latest.longestFocusedSeconds).toBe(300);
+    expect(latest.interventionTotal).toBe(3);
+    expect(latest.interventionsByType).toEqual({ bullet_summary: 2, simplify_content: 1 });
+  });
+});

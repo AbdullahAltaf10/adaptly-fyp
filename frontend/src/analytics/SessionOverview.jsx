@@ -1,11 +1,15 @@
 import { formatCount, formatDate, formatDurationSeconds, NOT_AVAILABLE } from "./format";
 import { SESSION_STATUS_LABELS } from "./labels";
 
+const CAMERA_ONLY_LABEL = "Camera only (no document)";
+
 /**
  * The top-of-page summary: what the session was, when, and how it ended.
  */
 export default function SessionOverview({ overview, summary }) {
-  const contentTitle = overview?.content_title || NOT_AVAILABLE;
+  const contentTitle =
+    overview?.content_title ||
+    (summary && summary.content_id === null ? CAMERA_ONLY_LABEL : NOT_AVAILABLE);
   const statusLabel =
     SESSION_STATUS_LABELS[overview?.session_status] ?? NOT_AVAILABLE;
 

@@ -19,8 +19,16 @@ import { ENGAGEMENT_STATE_LABELS, ENGAGEMENT_STATE_ORDER } from "./labels";
  */
 const POSITIVE_STATES = new Set(["focused", "recovered"]);
 
+/**
+ * Whether any engagement was measured. A session with nothing measured still
+ * arrives with a distribution, all of it "unknown"; that is not a result.
+ */
+export function isEngagementMeasured(distribution) {
+  return Boolean(distribution) && !(distribution.unknown?.percentage >= 100);
+}
+
 export default function EngagementSection({ distribution }) {
-  const hasData = Boolean(distribution);
+  const hasData = isEngagementMeasured(distribution);
   const focusedPercentage = distribution?.focused?.percentage;
 
   return (

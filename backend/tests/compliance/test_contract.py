@@ -56,6 +56,13 @@ class ComplianceReportSchemaTests(unittest.TestCase):
         score_result = build_engagement_quality_score(fixtures.full_summary())
         assert_schema_match(_envelope(score_result), _schema())
 
+    def test_camera_only_report_with_no_document_validates(self):
+        # A camera-only session has no document, so its report's content_id is null.
+        score_result = build_engagement_quality_score(fixtures.full_summary())
+        envelope = _envelope(score_result)
+        envelope["content_id"] = None
+        assert_schema_match(envelope, _schema())
+
     def test_insufficient_data_report_validates(self):
         score_result = build_engagement_quality_score(fixtures.all_components_missing())
         assert_schema_match(_envelope(score_result), _schema())

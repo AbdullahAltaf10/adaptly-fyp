@@ -21,8 +21,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { fetchSessionHistory } from "../analytics/api";
-import { computeDashboardStats } from "../analytics/dashboardStats";
+import { computeDashboardStats, focusTrend, latestSessionSummary } from "../analytics/dashboardStats";
 import { formatCount, formatDate, formatDurationSeconds, NOT_AVAILABLE } from "../analytics/format";
+import { INTERVENTION_TYPE_LABELS } from "../analytics/labels";
 import ErrorState from "../analytics/ErrorState";
 import LoadingState from "../analytics/LoadingState";
 import SummaryCard from "../analytics/SummaryCard";
@@ -34,8 +35,13 @@ import { Card } from "../ui";
     without pulling a learner's entire history onto their home screen. */
 const HISTORY_LIMIT = 30;
 
+function interventionCountOf(item) {
+  return (item.intervention_metrics?.by_type ?? []).reduce((sum, t) => sum + (t.total_count ?? 0), 0);
+}
+
 function RecentSessionRow({ item }) {
   const focused = item.engagement_distribution?.focused?.percentage;
+  const interventions = interventionCountOf(item);
   return (
     <li className="flex items-center justify-between gap-3 py-2.5 border-b border-line last:border-b-0">
       <div className="min-w-0">
@@ -48,6 +54,7 @@ function RecentSessionRow({ item }) {
         <p className="m-0 text-sm text-muted">
           {formatDurationSeconds(item.duration_seconds)}
           {focused !== null && focused !== undefined && ` · focused ${Math.round(focused)}%`}
+          {` · ${interventions} intervention${interventions === 1 ? "" : "s"}`}
         </p>
       </div>
     </li>
@@ -77,6 +84,8 @@ export default function DashboardPage({ loadHistory = fetchSessionHistory }) {
   const name = profile?.display_name || profile?.name || currentUser?.email || "there";
   const stats = computeDashboardStats(state.items);
   const recent = state.items.slice(0, 5);
+  const latest = latestSessionSummary(state.items);
+  const trend = focusTrend(state.items);
 
   return (
     <div>
@@ -127,6 +136,70 @@ export default function DashboardPage({ loadHistory = fetchSessionHistory }) {
               />
             </div>
           </section>
+
+          {latest && (
+            <section aria-label="Latest session" className="mb-5">
+              <Card className="p-4">
+                <h2 className="text-lg font-semibold m-0 mb-2">Latest session</h2>
+                <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 m-0 text-sm">
+                  <div>
+                    <dt className="text-muted">Focused</dt>
+                    <dd className="m-0 text-ink font-semibold">
+                      {latest.focusedPercentage === null ? NOT_AVAILABLE : `${Math.round(latest.focusedPercentage)}%`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">Length</dt>
+                    <dd className="m-0 text-ink">{formatDurationSeconds(latest.durationSeconds)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">Longest focused stretch</dt>
+                    <dd className="m-0 text-ink">
+                      {latest.longestFocusedSeconds === null ? NOT_AVAILABLE : formatDurationSeconds(latest.longestFocusedSeconds)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">Interventions</dt>
+                    <dd className="m-0 text-ink font-semibold">{latest.interventionTotal}</dd>
+                  </div>
+                </dl>
+                {latest.interventionTotal > 0 && (
+                  <ul className="flex flex-wrap gap-2 list-none p-0 m-0 mt-3">
+                    {Object.entries(latest.interventionsByType).map(([type, count]) => (
+                      <li key={type} className="text-xs rounded-full border border-line px-2.5 py-1 text-ink">
+                        {INTERVENTION_TYPE_LABELS[type] ?? type}: {count}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            </section>
+          )}
+
+          {trend.length > 0 && (
+            <section aria-labelledby="trend-heading" className="mb-5">
+              <h2 id="trend-heading" className="text-lg font-semibold mb-2">Focus trend</h2>
+              <div
+                role="img"
+                aria-label={`Focus trend across ${trend.length} session${trend.length === 1 ? "" : "s"}, percent focused`}
+                className="flex items-end gap-2 h-32 rounded-card border border-line bg-surface p-3"
+              >
+                {trend.map((point) => (
+                  <div key={point.sessionId} className="flex-1 flex flex-col items-center justify-end h-full min-w-0">
+                    <div
+                      data-focus-bar
+                      title={`${Math.round(point.focused)}% focused`}
+                      className="w-full rounded-t bg-accent"
+                      style={{ height: `${Math.max(2, Math.min(100, point.focused))}%` }}
+                    />
+                    <span className="text-[10px] text-muted mt-1 truncate w-full text-center">
+                      {formatDate(point.completedAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section aria-labelledby="recent-sessions-heading">
             <div className="flex items-center justify-between mb-2">
