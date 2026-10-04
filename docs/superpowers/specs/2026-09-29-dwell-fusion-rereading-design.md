@@ -72,9 +72,25 @@ is always fully available.
 **Non-regression guarantee (hard requirement):** if S2, S3, and S4 are all
 unavailable (no face, WebGazer denied/uncalibrated, no mouse activity), the
 formula reduces to S1 alone — byte-for-byte the same `activeChunkId` decision
-`useDwell.js` produces today. This is enforced by a unit test that runs the
-fusion function with only S1 present and diffs the result against the existing
-`useDwell` recompute logic on the same fixture inputs.
+`useDwell.js` produces today, **on the first tick of a session.** This is
+enforced by a unit test that runs the fusion function with only S1 present
+and diffs the result against the existing `useDwell` recompute logic on the
+same fixture inputs.
+
+**Amendment, 2026-10-03:** from the second tick on, the S1-only path now
+also applies the same temporal hysteresis as the S2-S4 branch (persist the
+previous `activeChunkId` within `HYSTERESIS_MARGIN`, rather than flipping
+to a new top ratio on noise). Reason: WebGazer (S3) had been running
+uncalibrated for every session since this spec shipped — `webgazerSignal.js`
+never called the WebGazer method that actually feeds its regression model
+training data, so `otherSignalsPresent` was frequently false in practice and
+the "fallback" path was the common one a real learner hit, not a rare edge
+case. Leaving it with zero flicker protection reproduced the exact
+flips-between-paragraphs symptom this whole module exists to prevent. The
+byte-for-byte guarantee above still holds for a session's very first fusion
+tick (no previous chunk exists yet to persist); see
+`fusionScoring.js`'s own module docstring and `fusionScoring.test.js`'s
+hysteresis describe block for the current, authoritative behavior.
 
 ## 3. Where fusion lives
 

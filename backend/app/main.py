@@ -1,5 +1,6 @@
 import app.core.paths  # noqa: F401  - puts repo root on sys.path for `ml`
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.engagement.warmup import warm_models_in_background
+from app.intervention import service as intervention_service
 
 
 @asynccontextmanager
@@ -33,6 +35,17 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+# Module 6 (scope 6.6) - off by default. A policy that has never run
+# against a live session should not become everyone's default the moment
+# it merges; see app/fusion/policy.py's own module docstring for why its
+# one new judgement call (chat as a tie-breaker, never an independent
+# trigger for the intrusive interventions) is deliberately conservative
+# rather than claimed as measured.
+if os.getenv("ADAPTLY_FUSION_POLICY") == "1":
+    from app.fusion.policy import FusionPolicy
+
+    intervention_service.set_decider(FusionPolicy())
 
 
 @app.get("/health")

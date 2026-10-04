@@ -20,10 +20,40 @@
  * guarantees (docs/privacy/webcam-data-handling.md, and the pre-session
  * dialog's "no video is recorded, stored, or sent anywhere"), so both are
  * corrected explicitly below rather than left at WebGazer's defaults.
+ *
+ * A third thing, found the same way, used to be missing entirely rather
+ * than overridden: `addMouseEventListeners()` is a public WebGazer method,
+ * never called anywhere inside the library itself (confirmed by searching
+ * the whole bundle), that attaches the click/mousemove listener its ridge
+ * regression actually trains from. Without calling it, `begin()` still
+ * starts the gaze listener firing every tick, but from a regression that
+ * has never seen a single training sample - every (x, y) WebGazer ever
+ * reported was noise from an untrained model, regardless of what the UI
+ * told the learner. See calibrationDots.js for the explicit click sequence
+ * that gives it real training data before a session starts, on top of
+ * whatever incidental clicks happen during the session itself.
  */
 
 let webgazerModulePromise = null;
 let latestPrediction = null;
+
+/**
+ * Where the explicit click-calibration sequence places its targets
+ * (fractions of viewport width/height), consumed by usePreSessionCheck.js's
+ * recordCalibrationPoint flow and rendered by PreSessionCheck.jsx. Four
+ * corners plus one off-centre point, all chosen to sit outside the
+ * pre-session dialog's own centred card so neither obscures the other.
+ * Five points, not one: a single click only ever gives WebGazer one (x, y)
+ * sample, nowhere near enough for ridge regression to fit a usable mapping
+ * across the whole screen.
+ */
+export const CALIBRATION_POINTS = [
+  { x: 0.08, y: 0.08 },
+  { x: 0.92, y: 0.08 },
+  { x: 0.08, y: 0.92 },
+  { x: 0.92, y: 0.92 },
+  { x: 0.5, y: 0.04 },
+];
 
 function loadWebgazer() {
   if (!webgazerModulePromise) {
@@ -45,6 +75,7 @@ export async function calibrateWebgazer() {
       .showPredictionPoints(false)
       .saveDataAcrossSessions(false);
     await webgazer.setRegression("ridge").begin();
+    webgazer.addMouseEventListeners();
     return { available: true };
   } catch (error) {
     latestPrediction = null;

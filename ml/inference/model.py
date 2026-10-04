@@ -56,7 +56,8 @@ MANIFEST_FILE = "MANIFEST.json"
 # single exported artifact, 0.36 is calibrated_threshold.py's 5-seed average,
 # and 0.36 is the one applied here (see MANIFEST `production_threshold_note`
 # for the measured difference between them).
-CALIBRATED_STRUGGLING_THRESHOLD = 0.36
+CALIBRATED_STRUGGLING_THRESHOLD = 0.38
+CALIBRATED_DRIFTING_WEIGHT = 0.92
 
 # Index -> label. Lowercase to match shared/contracts/engagement-event.schema.json.
 STATE_LABELS = {0: "focused", 1: "drifting", 2: "struggling"}
@@ -146,7 +147,7 @@ def load_model(calibrated: bool = False):
 
 
 def predict(feature_sequence, struggling_threshold: float = None,
-            calibrated: bool = False) -> dict:
+            calibrated: bool = False, drifting_weight: float = 1.0) -> dict:
     """
     feature_sequence: 10 windows of 9 features, already calibration-corrected.
 
@@ -196,11 +197,12 @@ def predict(feature_sequence, struggling_threshold: float = None,
     scaled = scaler.transform(array)
     probabilities = model.predict(scaled.reshape(1, WINDOW_SIZE, FEATURE_COUNT), verbose=0)[0]
 
-    if (struggling_threshold is not None
-            and probabilities[STRUGGLING_INDEX] >= struggling_threshold):
+    if struggling_threshold is None:
+        predicted = int(np.argmax(probabilities))
+    elif probabilities[STRUGGLING_INDEX] >= struggling_threshold:
         predicted = STRUGGLING_INDEX
     else:
-        predicted = int(np.argmax(probabilities))
+        predicted = 1 if probabilities[1] * drifting_weight >= probabilities[0] else 0
 
     return {
         "state": STATE_LABELS[predicted],

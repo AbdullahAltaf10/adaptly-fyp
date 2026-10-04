@@ -52,14 +52,63 @@ describe("useFloatingPlacement", () => {
 
     expect(computePosition).toHaveBeenCalledTimes(1);
     await act(async () => {
-      resolvePosition({ x: 42, y: 7, placement: "left-start" });
+      // Well inside a default jsdom viewport (1024x768) for a zero-size
+      // floating element, so clamping never engages - this test is only
+      // about the passthrough wiring, not clamping (see the dedicated
+      // clamping tests below).
+      resolvePosition({ x: 200, y: 150, placement: "left-start" });
       await Promise.resolve();
     });
 
     expect(result.current.ready).toBe(true);
-    expect(result.current.x).toBe(42);
-    expect(result.current.y).toBe(7);
+    expect(result.current.x).toBe(200);
+    expect(result.current.y).toBe(150);
     expect(result.current.placement).toBe("left-start");
+  });
+
+  it("clamps the result inside the viewport when the reference element is large enough that flip/shift still leaves the floating element partly off-screen", async () => {
+    // The real-world trigger: a single paragraph that fills the whole
+    // viewport (nothing else on screen), so the anchor math can still
+    // place the popup's own box mostly below the fold - only its top
+    // toolbar visible until the learner scrolls.
+    window.innerWidth = 1024;
+    window.innerHeight = 768;
+    const reference = el();
+    computePosition.mockReturnValue(Promise.resolve({ x: 900, y: 700, placement: "right-start" }));
+
+    const { result } = renderHook(() => useFloatingPlacement(reference));
+    const floating = el();
+    Object.defineProperty(floating, "getBoundingClientRect", {
+      value: () => ({ width: 320, height: 360 }),
+    });
+    await act(async () => {
+      result.current.floatingRef(floating);
+      await Promise.resolve();
+    });
+
+    // Must fit fully within the viewport: x + width <= innerWidth, y + height <= innerHeight.
+    expect(result.current.x + 320).toBeLessThanOrEqual(1024);
+    expect(result.current.y + 360).toBeLessThanOrEqual(768);
+  });
+
+  it("never clamps to a negative position when the floating element is larger than the viewport", async () => {
+    window.innerWidth = 1024;
+    window.innerHeight = 768;
+    const reference = el();
+    computePosition.mockReturnValue(Promise.resolve({ x: 900, y: 700, placement: "right-start" }));
+
+    const { result } = renderHook(() => useFloatingPlacement(reference));
+    const floating = el();
+    Object.defineProperty(floating, "getBoundingClientRect", {
+      value: () => ({ width: 2000, height: 2000 }),
+    });
+    await act(async () => {
+      result.current.floatingRef(floating);
+      await Promise.resolve();
+    });
+
+    expect(result.current.x).toBeGreaterThanOrEqual(0);
+    expect(result.current.y).toBeGreaterThanOrEqual(0);
   });
 
   it("subscribes with autoUpdate and cleans it up on unmount", () => {

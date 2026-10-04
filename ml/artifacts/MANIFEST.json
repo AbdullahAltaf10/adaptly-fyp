@@ -50,8 +50,9 @@
     "selected_seed": 2,
     "validation_macro_recall": 0.4036,
     "recommended_threshold": 0.34,
-    "production_threshold": 0.36,
-    "production_threshold_note": "Two different numbers on purpose, from two different runs of the same rule (lift >= 1.15, flag rate <= 0.25, then maximise recall). 0.34 is what train_calibrated.py derived on validation for THIS exported artifact alone. 0.36 is what ml/evaluation/calibrated_threshold.py selected averaged over its 5 seeds, and is what ml/inference/model.py CALIBRATED_STRUGGLING_THRESHOLD actually applies (commit 0a55244). On the test split 0.36 reads recall 0.212, lift 1.13x, 13/19 subjects, flag rate 0.187 against 0.34's 0.276 / 1.29x / 15/19 / 0.214: production trades some recall for about 12% fewer interruptions. Re-derive on validation whenever the exported model changes.",
+    "production_threshold": 0.38,
+    "production_drifting_weight": 0.92,
+    "production_threshold_note": "Two different numbers on purpose, from two different runs of the same rule (lift >= 1.15, flag rate <= 0.25, then maximise recall). 0.34 is what train_calibrated.py derived on validation for THIS exported artifact alone. 0.36 is what ml/evaluation/calibrated_threshold.py selected averaged over its 5 seeds, and was what ml/inference/model.py applied until 2026-10-04. The live rule is now tau 0.38 with a Drifting weight of 0.92, chosen by a constrained search on validation (Focused, Struggling, Drifting not below shipped; flag rate not above shipped) and checked on test once. On the test split 0.36 reads recall 0.212, lift 1.13x, 13/19 subjects, flag rate 0.187 against 0.34's 0.276 / 1.29x / 15/19 / 0.214: production trades some recall for about 12% fewer interruptions. Re-derive on validation whenever the exported model changes.",
     "trained_at": "2026-09-21T11:20:04.128218+00:00",
     "training": {
       "epochs": 50,

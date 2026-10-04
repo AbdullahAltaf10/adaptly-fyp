@@ -29,7 +29,47 @@ import {
   CAMERA_MISSING,
 } from "./usePreSessionCheck";
 import { describeContentWarning } from "../content/warnings";
+import { CALIBRATION_POINTS } from "./webgazerSignal";
 import { Button } from "../ui";
+
+/**
+ * One real click target per CALIBRATION_POINTS entry. Replaces a single
+ * "Calibrate" click that used to flip straight to webgazerStatus "ready"
+ * with zero training samples ever given to WebGazer's regression (see
+ * webgazerSignal.js's own docstring on addMouseEventListeners()) - each of
+ * these dots IS a genuine (x, y) training click once addMouseEventListeners
+ * has been wired up, not decoration.
+ */
+function CalibrationPoints({ clicked, onRecord }) {
+  return (
+    <>
+      {CALIBRATION_POINTS.map((point, index) => {
+        const done = clicked.has(index);
+        return (
+          <button
+            key={index}
+            type="button"
+            aria-label={`Calibration point ${index + 1} of ${CALIBRATION_POINTS.length}`}
+            aria-pressed={done}
+            onClick={() => onRecord(index)}
+            style={{
+              position: "fixed",
+              left: `${point.x * 100}%`,
+              top: `${point.y * 100}%`,
+              transform: "translate(-50%, -50%)",
+              zIndex: 1100,
+            }}
+            className={`h-8 w-8 rounded-full border-2 transition-colors ${
+              done
+                ? "bg-success border-success"
+                : "bg-accent border-accent animate-pulse"
+            }`}
+          />
+        );
+      })}
+    </>
+  );
+}
 
 const CAMERA_PROBLEMS = {
   [CAMERA_DENIED]:
@@ -128,13 +168,19 @@ export default function PreSessionCheck({ check, warnings = [], document, onStar
         {check.cameraReady && check.webgazerStatus !== "unavailable" && (
           <div className="rounded-md border border-line bg-page p-3 mb-3">
             <p className="m-0 mb-2 text-sm text-ink">
-              Optional: calibrate eye tracking for better paragraph focus.
+              {check.webgazerStatus === "awaiting-points"
+                ? `Click each of the ${CALIBRATION_POINTS.length} dots on screen while looking at it (${check.calibrationPointsClicked.size}/${CALIBRATION_POINTS.length} done).`
+                : "Optional: calibrate eye tracking for better paragraph focus."}
             </p>
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
                 onClick={check.startWebgazerCalibration}
-                disabled={check.webgazerStatus === "calibrating" || check.webgazerStatus === "ready"}
+                disabled={
+                  check.webgazerStatus === "calibrating"
+                  || check.webgazerStatus === "awaiting-points"
+                  || check.webgazerStatus === "ready"
+                }
               >
                 {check.webgazerStatus === "ready" ? "Calibrated" : "Calibrate"}
               </Button>
@@ -143,6 +189,13 @@ export default function PreSessionCheck({ check, warnings = [], document, onStar
               </Button>
             </div>
           </div>
+        )}
+
+        {check.webgazerStatus === "awaiting-points" && (
+          <CalibrationPoints
+            clicked={check.calibrationPointsClicked}
+            onRecord={check.recordCalibrationPoint}
+          />
         )}
 
         {check.readabilitySuggestion && (

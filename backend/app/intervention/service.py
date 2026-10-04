@@ -188,7 +188,11 @@ def evaluate(
 
     history = store.list_for_session(session_id)
     last_decision_at = _last_decision_timestamp(history)
-    recovery = None  # MUTATION
+    recovery = (
+        _recovery_since_last_decision(uid, session_id, last_decision_at)
+        if last_decision_at is not None
+        else None
+    )
     decision = _decider.decide(signals, history=history, recovery=recovery)
     if decision is None:
         return {"intervention": None, "note": "no intervention warranted"}

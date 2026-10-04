@@ -15,6 +15,28 @@ import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/d
 
 const GAP_PX = 12;
 
+// A last-resort safety net, applied AFTER flip()/shift() have already done
+// their collision avoidance against the reference element. flip()/shift()
+// only reason about the reference element's own box - when that box is
+// itself mostly or entirely off-screen (e.g. a single paragraph tall enough
+// to fill the whole viewport, with nothing else visible), their output can
+// still place the floating element's OWN box mostly below the fold, leaving
+// only its top edge (a toolbar row) visible until the learner scrolls. This
+// clamps the final x/y so the floating element's own rendered box always
+// fits inside the current viewport, regardless of where the reference
+// element's box is.
+const VIEWPORT_PADDING_PX = 8;
+
+function clampToViewport(x, y, floatingElement) {
+  const rect = floatingElement.getBoundingClientRect();
+  const maxX = Math.max(window.innerWidth - rect.width - VIEWPORT_PADDING_PX, VIEWPORT_PADDING_PX);
+  const maxY = Math.max(window.innerHeight - rect.height - VIEWPORT_PADDING_PX, VIEWPORT_PADDING_PX);
+  return {
+    x: Math.min(Math.max(x, VIEWPORT_PADDING_PX), maxX),
+    y: Math.min(Math.max(y, VIEWPORT_PADDING_PX), maxY),
+  };
+}
+
 export function useFloatingPlacement(referenceElement, { enabled = true, placement = "right-start" } = {}) {
   const [floatingElement, setFloatingElement] = useState(null);
   const floatingRef = useCallback((node) => setFloatingElement(node), []);
@@ -31,7 +53,8 @@ export function useFloatingPlacement(referenceElement, { enabled = true, placeme
         placement,
         middleware: [offset(GAP_PX), flip(), shift({ padding: 8 })],
       }).then((result) => {
-        setState({ x: result.x, y: result.y, placement: result.placement, ready: true });
+        const { x, y } = clampToViewport(result.x, result.y, floatingElement);
+        setState({ x, y, placement: result.placement, ready: true });
       });
     }
 

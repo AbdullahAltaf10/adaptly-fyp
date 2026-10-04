@@ -150,7 +150,17 @@ describe("computeActiveChunk: temporal hysteresis (avoids flicker on a real tie)
     expect(result.activeChunkId).toBe("a");
   });
 
-  it("does not apply hysteresis on the pure-visibility path (non-regression is exact-match, not margin-based)", () => {
+  it("applies hysteresis on the pure-visibility path too, not only when extra signals are present", () => {
+    // 2026-10-03 reversal of a prior deliberate decision: the additional
+    // signals (WebGazer, gaze-quadrant, mouse) are frequently absent in a
+    // real session - WebGazer in particular was never actually trained
+    // until addMouseEventListeners() was wired up (webgazerSignal.js) - so
+    // the pure-visibility path is the COMMON case in practice, not a rare
+    // fallback, and leaving it with zero flicker protection reproduced the
+    // exact "settles on neither paragraph, flips between them" symptom this
+    // module exists to prevent. The exact-tie non-regression test above
+    // still holds with no previous chunk (first tick); this only changes
+    // behavior once there IS a previous chunk to persist.
     const chunkRects = new Map([["a", rect(0, 50)], ["b", rect(50, 100)]]);
     const visibility = new Map([["a", 0.5], ["b", 0.5]]);
     const result = computeActiveChunk(
@@ -158,6 +168,28 @@ describe("computeActiveChunk: temporal hysteresis (avoids flicker on a real tie)
       chunkRects,
       "b"
     );
-    expect(result.activeChunkId).toBe("a"); // unchanged from the non-regression test above
+    expect(result.activeChunkId).toBe("b"); // stays put on the tie, does not flip to "a"
+  });
+
+  it("keeps the previous chunk on the pure-visibility path within the hysteresis margin, not only on an exact tie", () => {
+    const chunkRects = new Map([["a", rect(0, 50)], ["b", rect(50, 100)]]);
+    const visibility = new Map([["a", 0.55], ["b", 0.52]]); // "a" nudges ahead, but barely
+    const result = computeActiveChunk(
+      { visibility, gazeQuadrant: null, webgazer: null, mouse: null },
+      chunkRects,
+      "b"
+    );
+    expect(result.activeChunkId).toBe("b");
+  });
+
+  it("still switches on the pure-visibility path once the lead clearly exceeds the hysteresis margin", () => {
+    const chunkRects = new Map([["a", rect(0, 50)], ["b", rect(50, 100)]]);
+    const visibility = new Map([["a", 0.9], ["b", 0.1]]);
+    const result = computeActiveChunk(
+      { visibility, gazeQuadrant: null, webgazer: null, mouse: null },
+      chunkRects,
+      "b"
+    );
+    expect(result.activeChunkId).toBe("a");
   });
 });

@@ -11,21 +11,31 @@
  * MIN_FUSION_SCORE would otherwise suppress. That case is handled as its
  * own path below rather than folded into the general formula.
  *
- * Temporal hysteresis (2026-09-30): a real webcam observed live could
- * produce a genuine, sustained tie - e.g. two short paragraphs both fully
- * visible at once, with a coarse gaze-band signal that doesn't clearly
- * favour either. Without persistence, that tie was broken by Map
- * iteration order (whichever chunk was registered first), which could
- * flip mid-tie for no reason a learner would ever notice a cause for.
- * Confidence-weighted multimodal fusion research consistently uses
- * temporal persistence to avoid exactly this flicker (see e.g. PMC
- * 13119640's "soft suppression" gating and the general "confidence-trend
- * -driven dynamic weighting" pattern) - the same principle a Kalman-
- * filtered gaze estimate uses to stay put on an ambiguous reading rather
- * than jittering between equally-plausible ones. Scoped to the
- * additional-signals branch only: the pure-visibility path's
- * non-regression contract with useDwell's own exact-tie behavior is a
- * separate, deliberate guarantee and must not change.
+ * Temporal hysteresis (2026-09-30, extended to the pure-visibility path
+ * 2026-10-03): a real webcam observed live could produce a genuine,
+ * sustained tie - e.g. two short paragraphs both fully visible at once, with
+ * a coarse gaze-band signal that doesn't clearly favour either. Without
+ * persistence, that tie was broken by Map iteration order (whichever chunk
+ * was registered first), which could flip mid-tie for no reason a learner
+ * would ever notice a cause for. Confidence-weighted multimodal fusion
+ * research consistently uses temporal persistence to avoid exactly this
+ * flicker (see e.g. PMC 13119640's "soft suppression" gating and the general
+ * "confidence-trend-driven dynamic weighting" pattern) - the same principle
+ * a Kalman-filtered gaze estimate uses to stay put on an ambiguous reading
+ * rather than jittering between equally-plausible ones.
+ *
+ * Originally scoped to the additional-signals branch only, on the reasoning
+ * that the pure-visibility path needed an exact-match non-regression
+ * contract with useDwell's own behavior. In practice the additional signals
+ * (WebGazer especially - see webgazerSignal.js's own docstring on
+ * addMouseEventListeners(), missing until 2026-10-03, which meant WebGazer's
+ * regression had never seen a single training sample) are frequently absent,
+ * making the "fallback" path the COMMON one, not a rare edge case - and
+ * leaving it with zero flicker protection reproduced exactly the
+ * flips-between-paragraphs symptom this module exists to prevent. The
+ * non-regression guarantee now holds only for the FIRST tick of a session
+ * (no previous chunk yet to persist) - see the non-regression describe
+ * block above, all of which pass `previousActiveChunkId = null`.
  */
 
 export const MIN_FUSION_SCORE = 0.15;
@@ -65,8 +75,14 @@ function bandVote(band, rect, viewportHeight) {
   return Math.max(0, Math.min(1, overlap / rectHeight));
 }
 
-/** The visibility-only path, identical to useDwell's own recompute(). */
-function visibilityOnlyResult(visibility) {
+/**
+ * The visibility-only path. Matches useDwell's own recompute() exactly on
+ * the first tick of a session (previousActiveChunkId = null); from the
+ * second tick on, a previous chunk within HYSTERESIS_MARGIN of the new
+ * top ratio is kept rather than displaced, for the same flicker-avoidance
+ * reason as the additional-signals branch below.
+ */
+function visibilityOnlyResult(visibility, previousActiveChunkId = null) {
   let bestId = null;
   let bestRatio = 0;
   visibility.forEach((ratio, chunkId) => {
@@ -75,6 +91,17 @@ function visibilityOnlyResult(visibility) {
       bestId = chunkId;
     }
   });
+
+  if (
+    previousActiveChunkId !== null
+    && previousActiveChunkId !== bestId
+    && visibility.has(previousActiveChunkId)
+    && visibility.get(previousActiveChunkId) >= bestRatio - HYSTERESIS_MARGIN
+  ) {
+    bestId = previousActiveChunkId;
+    bestRatio = visibility.get(previousActiveChunkId);
+  }
+
   return {
     activeChunkId: bestRatio > 0 ? bestId : null,
     fusionConfidence: bestRatio > 0 ? SIGNAL_WEIGHTS.visibility : 0,
@@ -93,7 +120,7 @@ export function computeActiveChunk(signals, chunkRects, previousActiveChunkId = 
   }
 
   if (!otherSignalsPresent) {
-    return visibilityOnlyResult(visibility);
+    return visibilityOnlyResult(visibility, previousActiveChunkId);
   }
 
   const scores = new Map();
@@ -175,7 +202,7 @@ export function computeActiveChunk(signals, chunkRects, previousActiveChunkId = 
     // unhelpful. A low-but-nonzero visibility ratio would have been picked
     // with no other signal at all (see the non-regression tests); an
     // unhelpful extra signal must not make that worse.
-    const fallback = visibilityOnlyResult(visibility);
+    const fallback = visibilityOnlyResult(visibility, previousActiveChunkId);
     return { ...fallback, breakdown };
   }
   return { activeChunkId: bestId, fusionConfidence: Math.min(1, bestScore), breakdown };

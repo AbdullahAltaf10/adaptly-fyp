@@ -27,7 +27,7 @@ from app.engagement import (
 )
 from app.engagement.analytics_sink import record_engagement_event
 from app.engagement.calibration import apply_calibration, compute_offset, compute_user_baseline
-from ml.inference.model import CALIBRATED_STRUGGLING_THRESHOLD
+from ml.inference.model import CALIBRATED_DRIFTING_WEIGHT, CALIBRATED_STRUGGLING_THRESHOLD
 from app.intervention import content as intervention_content
 from app.intervention import service as intervention
 from app.analytics.service import session_lifecycle
@@ -225,6 +225,7 @@ def analyze(payload: AnalyzeRequest, user=Depends(get_current_user)):
             struggling_threshold=(
                 CALIBRATED_STRUGGLING_THRESHOLD if calibrated else None
             ),
+            drifting_weight=CALIBRATED_DRIFTING_WEIGHT,
         )
 
         raw_landmarks = [frame.landmarks for frame in payload.frames]

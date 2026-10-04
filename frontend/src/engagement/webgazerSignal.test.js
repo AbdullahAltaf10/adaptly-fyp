@@ -9,6 +9,8 @@ let saveDataAcrossSessionsCalledWith = null;
 let stopVideoCalled = false;
 let clearDataCalled = false;
 
+let addMouseEventListenersCalled = false;
+
 const webgazerMock = {
   setRegression: vi.fn(() => webgazerMock),
   setGazeListener: vi.fn((callback) => {
@@ -27,6 +29,10 @@ const webgazerMock = {
   end: vi.fn(() => { endCalled = true; }),
   stopVideo: vi.fn(() => { stopVideoCalled = true; }),
   clearData: vi.fn(() => { clearDataCalled = true; return Promise.resolve(); }),
+  addMouseEventListeners: vi.fn(() => {
+    addMouseEventListenersCalled = true;
+    return webgazerMock;
+  }),
 };
 
 vi.mock("webgazer", () => ({ default: webgazerMock }));
@@ -39,6 +45,7 @@ beforeEach(async () => {
   saveDataAcrossSessionsCalledWith = null;
   stopVideoCalled = false;
   clearDataCalled = false;
+  addMouseEventListenersCalled = false;
 });
 
 describe("webgazerSignal", () => {
@@ -110,5 +117,19 @@ describe("webgazerSignal", () => {
   it("stopWebgazer is a safe no-op when calibration never ran", async () => {
     const { stopWebgazer } = await import("./webgazerSignal");
     expect(() => stopWebgazer()).not.toThrow();
+  });
+
+  it("enables click-based calibration data collection - WebGazer never learns anything without this", async () => {
+    // The bug this pins: WebGazer's own addMouseEventListeners() is what
+    // attaches the click listener its regression model actually trains
+    // from (confirmed by reading node_modules/webgazer/dist/webgazer.js -
+    // it is a public method, never called internally by begin() or
+    // anywhere else in the library). Without calling it, setGazeListener
+    // still fires every tick, but from a ridge regression that has never
+    // seen a single training sample - every (x, y) it has ever reported
+    // in this app came from an untrained model.
+    const { calibrateWebgazer } = await import("./webgazerSignal");
+    await calibrateWebgazer();
+    expect(addMouseEventListenersCalled).toBe(true);
   });
 });
