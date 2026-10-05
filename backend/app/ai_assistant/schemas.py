@@ -132,13 +132,26 @@ class AssistantMessageRequest(AssistantModel):
         return value
 
 
+class GlossaryEntry(AssistantModel):
+    """One technical term and its definition, as Module 2 stored it."""
+
+    term: str
+    definition: str
+
+
 class NormalizedContentContext(AssistantModel):
-    """Content metadata with the request's required content identifier."""
+    """Content metadata with the request's required content identifier.
+
+    `glossary` is read from the stored document on the server, never from the
+    request: it is presented to the model as Adaptly-established fact, so it
+    has to be something the server established.
+    """
 
     content_id: str
     title: str | None = None
     content_type: str | None = None
     language: str | None = None
+    glossary: list[GlossaryEntry] = []
 
 
 class NormalizedSessionContext(AssistantModel):

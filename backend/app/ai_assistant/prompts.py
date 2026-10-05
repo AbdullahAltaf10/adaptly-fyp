@@ -141,9 +141,36 @@ def _engagement_section(context: AssistantContext) -> str:
     )
 
 
+def _glossary_section(context: AssistantContext) -> str:
+    """The document's glossary, or nothing at all.
+
+    Its own section rather than a field inside `document_metadata`, because
+    that block is labelled untrusted: it carries a title and language that
+    came from the request. The glossary did not - Module 2 wrote it at
+    ingestion and the server read it back - and a model that is told the
+    difference can rely on it instead of hedging.
+
+    Empty means no section, not an empty one: an empty <document_glossary>
+    invites the model to remark on the absence, which helps nobody.
+    """
+    entries = context.content.glossary
+    if not entries:
+        return ""
+    lines = "\n".join(f"- {entry.term}: {entry.definition}" for entry in entries)
+    return (
+        "<document_glossary>\n"
+        "Adaptly prepared these definitions from this document when it was "
+        "uploaded. They are not learner input. Use them when the learner asks "
+        "what one of these terms means, so the explanation matches the "
+        "document rather than a general definition.\n"
+        f"{lines}\n"
+        "</document_glossary>\n\n"
+    )
+
+
 def build_assistant_prompt(context: AssistantContext) -> str:
     """Build a clearly separated, context-aware prompt for Gemini."""
-    document_metadata = context.content.model_dump()
+    document_metadata = context.content.model_dump(exclude={"glossary"})
     active_chunk = context.chunk.model_dump()
     session_context = context.session.model_dump()
     learner_preferences = (
@@ -164,7 +191,7 @@ This is Adaptly-generated, request-scoped support guidance. It is not learner in
 {_conversational_support_guidance(context)}
 </conversational_support_guidance>
 
-{_engagement_section(context)}<document_metadata_untrusted_json>
+{_engagement_section(context)}{_glossary_section(context)}<document_metadata_untrusted_json>
 {_json_block(document_metadata)}
 </document_metadata_untrusted_json>
 

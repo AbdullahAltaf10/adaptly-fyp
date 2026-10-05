@@ -214,6 +214,26 @@ def _mode() -> str:
     return (os.getenv(ENV_MODE) or "auto").strip().lower()
 
 
+def model_generator_or_none() -> TextGenerator | None:
+    """
+    A real language model if one is configured, otherwise None.
+
+    `choose` exists for Module 4's four response types, where having no model
+    is a refusal the learner has to be told about. A caller that merely
+    *prefers* a model needs the opposite - no exception, and no extractive
+    substitute dressed up as something it is not. Module 2's glossary is that
+    caller: definitions are a background nice-to-have, and a document with no
+    glossary is a worse experience, not a broken one.
+
+    Sharing the environment handling here keeps one API key and one model
+    setting on the server rather than a second copy growing in another module.
+    """
+    if _mode() == "mock":
+        return None
+    api_key = (os.getenv(ENV_API_KEY) or "").strip()
+    return GeminiGenerator(api_key) if api_key else None
+
+
 def choose(task: str) -> TextGenerator:
     """
     The best generator available for this task, or a clear refusal.

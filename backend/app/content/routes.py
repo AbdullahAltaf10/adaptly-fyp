@@ -14,7 +14,15 @@ scattered through six near-copies of the same handler.
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
 
 from app.auth.dependencies import get_current_user
 from app.content import extractors
@@ -23,7 +31,8 @@ from app.content.contracts import to_contract, to_summary
 from app.content.language import build_warnings, detect_language
 from app.content.models import build_content_doc, content_fingerprint
 from app.content.security import validate_public_url
-from app.content.terms import build_glossary, extract_technical_terms
+from app.content.glossary import refresh_glossary_safely
+from app.content.terms import extract_technical_terms
 from app.content.validation import (
     validate_extracted_text,
     validate_text_input,
@@ -34,7 +43,10 @@ from app.core.db import db
 router = APIRouter(prefix="/content", tags=["content"])
 
 
-def _store(uid, content_type, title, text, *, source=None, is_transcription=False, extra=None):
+def _store(
+    uid, content_type, title, text, *,
+    source=None, is_transcription=False, extra=None, background=None,
+):
     """
     Shared tail of every ingestion path: analyse, chunk, store, return.
 
@@ -64,11 +76,19 @@ def _store(uid, content_type, title, text, *, source=None, is_transcription=Fals
         language=language,
         warnings=warnings,
         technical_terms=terms,
-        glossary=build_glossary(terms, text),
+        # Empty on purpose: the definitions are written afterwards, by the
+        # background task scheduled below, so an upload never waits on a
+        # model call. Scope 6.2 asks for a glossary prepared in the
+        # background, and this is what makes it background.
+        glossary=[],
         extra=extra,
     )
     inserted = db.content.insert_one(doc)
     doc["content_id"] = str(inserted.inserted_id)
+
+    if background is not None and terms:
+        background.add_task(refresh_glossary_safely, doc["content_id"], terms, text)
+
     return to_contract(doc, include_chunks=False)
 
 
@@ -77,15 +97,26 @@ def _store(uid, content_type, title, text, *, source=None, is_transcription=Fals
 # --------------------------------------------------------------------------
 
 @router.post("/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def upload_pdf(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
     data = await file.read()
     validate_upload(data, "pdf", file.filename)
     text = validate_extracted_text(extractors.extract_pdf(data), "that PDF")
-    return _store(user["uid"], "pdf", file.filename, text, source=file.filename)
+    return _store(
+        user["uid"], "pdf", file.filename, text,
+        source=file.filename, background=background,
+    )
 
 
 @router.post("/upload-research-paper")
-async def upload_research_paper(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def upload_research_paper(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
     data = await file.read()
     validate_upload(data, "pdf", file.filename)
     result = extractors.extract_research_paper(data)
@@ -93,6 +124,7 @@ async def upload_research_paper(file: UploadFile = File(...), user=Depends(get_c
     return _store(
         user["uid"], "research_paper", file.filename, text,
         source=file.filename,
+        background=background,
         # Kept internally; not sent in the contract, which forbids extra fields.
         extra={"abstract_detected": result["abstract"] is not None,
                "abstract": result["abstract"]},
@@ -100,35 +132,58 @@ async def upload_research_paper(file: UploadFile = File(...), user=Depends(get_c
 
 
 @router.post("/paste-text")
-async def paste_text(title: str = Form(...), text: str = Form(...), user=Depends(get_current_user)):
+async def paste_text(
+    background: BackgroundTasks,
+    title: str = Form(...),
+    text: str = Form(...),
+    user=Depends(get_current_user),
+):
     cleaned = validate_text_input(text)
-    return _store(user["uid"], "text", title, cleaned)
+    return _store(user["uid"], "text", title, cleaned, background=background)
 
 
 @router.post("/from-url")
-async def from_url(url: str = Form(...), user=Depends(get_current_user)):
+async def from_url(
+    background: BackgroundTasks,
+    url: str = Form(...),
+    user=Depends(get_current_user),
+):
     safe_url = validate_public_url(url)          # SSRF check before any fetch
     title, text = extractors.extract_website(safe_url)
     text = validate_extracted_text(text, "that web page")
-    return _store(user["uid"], "website", title, text, source=safe_url)
+    return _store(
+        user["uid"], "website", title, text,
+        source=safe_url, background=background,
+    )
 
 
 @router.post("/from-youtube")
-async def from_youtube(url: str = Form(...), user=Depends(get_current_user)):
+async def from_youtube(
+    background: BackgroundTasks,
+    url: str = Form(...),
+    user=Depends(get_current_user),
+):
     text = extractors.extract_youtube(url)
     text = validate_extracted_text(text, "that video's captions")
-    return _store(user["uid"], "youtube", url, text, source=url, is_transcription=True)
+    return _store(
+        user["uid"], "youtube", url, text,
+        source=url, is_transcription=True, background=background,
+    )
 
 
 @router.post("/upload-video")
-async def upload_video(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def upload_video(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
     data = await file.read()
     validate_upload(data, "video", file.filename)
     text = extractors.extract_video(data, file.filename)
     text = validate_extracted_text(text, "that video")
     return _store(
         user["uid"], "video", file.filename, text,
-        source=file.filename, is_transcription=True,
+        source=file.filename, is_transcription=True, background=background,
     )
 
 

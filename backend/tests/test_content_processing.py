@@ -98,7 +98,17 @@ def test_empty_text_gives_no_terms():
     assert extract_technical_terms("") == []
 
 
-def test_glossary_is_an_empty_stub_until_an_llm_is_configured():
+def test_glossary_is_empty_when_no_language_model_is_configured(monkeypatch):
+    """No model means no glossary — never a guessed one.
+
+    This used to assert that `build_glossary` was a stub. It is not one any
+    more (see tests/test_content_glossary.py for what it does now), but the
+    no-model path still has to return an empty list rather than fail an
+    upload. Mock mode is set explicitly so the suite never spends the shared
+    free-tier quota, which is 20 requests a day across Modules 2, 4, 5 and 8.
+    """
+    monkeypatch.setenv("INTERVENTION_CONTENT_MODE", "mock")
+
     assert build_glossary(["LSTM"], "context") == []
 
 
