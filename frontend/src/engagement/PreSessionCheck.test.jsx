@@ -8,7 +8,7 @@
  * ours to decide.
  */
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import PreSessionCheck from "./PreSessionCheck";
@@ -118,6 +118,76 @@ describe("Module 2's document warnings", () => {
   it("says nothing about the document when there is nothing to say", () => {
     setup({}, { warnings: [] });
     expect(screen.queryByText(/about this document/i)).toBeNull();
+  });
+});
+
+describe("WebGazer calibration and readability suggestion", () => {
+  it("shows a skippable 'calibrate your eyes' step once the camera is ready", () => {
+    // "calibrate" alone would also match the button's own label ("Calibrate"),
+    // so this checks the descriptive copy specifically, not just any match.
+    setup({ webgazerStatus: "idle" });
+    expect(screen.getByText(/eye tracking/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /skip/i })).toBeInTheDocument();
+  });
+
+  it("does not block Start while calibration is unavailable", () => {
+    setup({ webgazerStatus: "unavailable" });
+    expect(screen.getByRole("button", { name: /start session/i })).not.toBeDisabled();
+  });
+
+  it("shows a dismissible font/line-spacing suggestion when one is present", () => {
+    const dismissReadabilitySuggestion = vi.fn();
+    setup({
+      webgazerStatus: "ready",
+      readabilitySuggestion: { fontUp: true, lineSpacingUp: false },
+      dismissReadabilitySuggestion,
+    });
+    expect(screen.getByText(/larger text might make this easier/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+    expect(dismissReadabilitySuggestion).toHaveBeenCalled();
+  });
+
+  it("never renders a suggestion when readabilitySuggestion is null", () => {
+    setup({ webgazerStatus: "ready", readabilitySuggestion: null });
+    expect(screen.queryByText(/larger text/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a click target for every calibration point while awaiting clicks, not a single button that silently claims readiness", () => {
+    setup({
+      webgazerStatus: "awaiting-points",
+      calibrationPointsClicked: new Set(),
+    });
+    // One real click target per CALIBRATION_POINTS entry (5), each its own
+    // accessible button - the bug this replaces was a single "Calibrate"
+    // click flipping straight to "ready" with zero training samples given
+    // to WebGazer's regression.
+    expect(screen.getAllByRole("button", { name: /calibration point/i })).toHaveLength(5);
+  });
+
+  it("calls recordCalibrationPoint with the clicked point's index", () => {
+    const recordCalibrationPoint = vi.fn();
+    setup({
+      webgazerStatus: "awaiting-points",
+      calibrationPointsClicked: new Set(),
+      recordCalibrationPoint,
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: /calibration point/i })[2]);
+    expect(recordCalibrationPoint).toHaveBeenCalledWith(2);
+  });
+
+  it("marks an already-clicked point so the learner can see their progress", () => {
+    setup({
+      webgazerStatus: "awaiting-points",
+      calibrationPointsClicked: new Set([0, 1]),
+    });
+    const buttons = screen.getAllByRole("button", { name: /calibration point/i });
+    expect(buttons[0].getAttribute("aria-pressed")).toBe("true");
+    expect(buttons[2].getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("stops showing calibration points once status reaches ready", () => {
+    setup({ webgazerStatus: "ready", calibrationPointsClicked: new Set() });
+    expect(screen.queryByRole("button", { name: /calibration point/i })).not.toBeInTheDocument();
   });
 });
 

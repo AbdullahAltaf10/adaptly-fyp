@@ -1,6 +1,7 @@
+import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { sendAssistantMessage } from "./assistantApi";
+import { fetchAssistantHistory, fetchSuggestedQuestions, sendAssistantMessage } from "./assistantApi";
 import { fallbackStudyContext, fallbackSuggestedQuestions } from "./demoStudyContext";
 import { MessageList } from "./MessageList";
 import { QuestionInput } from "./QuestionInput";
@@ -8,7 +9,6 @@ import { SuggestedQuestions } from "./SuggestedQuestions";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { useSpeechSynthesis } from "./useSpeechSynthesis";
 import { VoiceInputButton } from "./VoiceInputButton";
-import "./assistant.css";
 
 const safeErrorMessage = "I couldn't get a response right now. Please try again.";
 
@@ -16,7 +16,18 @@ function messageForHistory(message) {
   return { role: message.role, message: message.content };
 }
 
-export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext = fallbackStudyContext }) {
+export function AssistantPanel({
+  apiClient = sendAssistantMessage,
+  suggestionsClient = fetchSuggestedQuestions,
+  historyClient = fetchAssistantHistory,
+  studyContext = fallbackStudyContext,
+  // Set by StudySession when the learner clicks "Continue in chat" on a
+  // ParagraphPopup: the same content already shown there, appended to this
+  // same persistent conversation so further questions have it as context.
+  // { id, content } - id is what gates re-application, not object identity,
+  // so the caller does not need to memoize it.
+  seedTurn = null,
+}) {
   const [messages, setMessages] = useState([]);
   const [suggestedQuestions, setSuggestedQuestions] = useState(fallbackSuggestedQuestions);
   const [input, setInput] = useState("");
@@ -30,8 +41,14 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
   // before sending, is correctly recorded as typed.
   const [inputSource, setInputSource] = useState("typed");
   const nextMessageId = useRef(1);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const appliedSeedIdRef = useRef(null);
   const endRef = useRef(null);
   const previousSessionId = useRef(studyContext.session_id);
+  // Bumped whenever something else decides the suggestions (a new paragraph, or
+  // an answer that came with its own). A paragraph's suggestions arrive late
+  // and must not overwrite ones the learner has already moved past.
+  const suggestionVersion = useRef(0);
   const speech = useSpeechSynthesis();
 
   function handleManualInputChange(value) {
@@ -56,13 +73,72 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
   }, [messages, isLoading, error]);
 
   useEffect(() => {
+    let cancelled = false;
+    historyClient()
+      .then((history) => {
+        if (cancelled || !Array.isArray(history) || history.length === 0) return;
+        setMessages(
+          history.map((entry) => ({
+            id: nextMessageId.current++,
+            role: entry.role,
+            content: entry.content,
+          }))
+        );
+      })
+      .catch(() => {
+        // A history that fails to load leaves the conversation empty -
+        // today's actual starting state - rather than blocking the panel.
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Runs once, on mount, regardless of studyContext - a remount (closing
+    // and reopening the panel) is exactly when this should re-fetch, since
+    // AssistantPanel already loses its in-memory `messages` state on every
+    // remount today.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Gated on historyLoaded so a fresh mount (panel opened BY the redirect
+    // itself) cannot race: history's setMessages is a wholesale replace, and
+    // resolving after an early-applied seed would silently wipe it. Gated
+    // on the seed's own id, not object identity, so the caller passing a
+    // fresh object each render does not re-append it.
+    if (!historyLoaded || !seedTurn || appliedSeedIdRef.current === seedTurn.id) return;
+    appliedSeedIdRef.current = seedTurn.id;
+    setMessages((current) => [
+      ...current,
+      { id: nextMessageId.current++, role: "assistant", content: seedTurn.content },
+    ]);
+  }, [historyLoaded, seedTurn]);
+
+  useEffect(() => {
     if (previousSessionId.current !== studyContext.session_id) {
       setMessages([]);
       setError("");
       setFailedRequest(null);
     }
     previousSessionId.current = studyContext.session_id;
+
+    // Show the generic questions at once, then replace them with ones about
+    // THIS paragraph as soon as the server has them. A failure just keeps the
+    // generic ones: suggestions are a convenience and must never be an error.
     setSuggestedQuestions(fallbackSuggestedQuestions);
+    const version = ++suggestionVersion.current;
+    const controller = new AbortController();
+    Promise.resolve(suggestionsClient(studyContext.current_chunk, { signal: controller.signal }))
+      .then((questions) => {
+        if (suggestionVersion.current === version && Array.isArray(questions)) {
+          setSuggestedQuestions(questions);
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     studyContext.session_id,
     studyContext.content_id,
@@ -110,6 +186,9 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
         ...currentMessages,
         { id: nextMessageId.current++, role: "assistant", content: result.answer },
       ]);
+      // An answer brings its own suggestions, so a slower paragraph fetch that
+      // is still in flight must not replace them.
+      suggestionVersion.current += 1;
       setSuggestedQuestions(result.suggested_questions || fallbackSuggestedQuestions);
       if (voiceResponsesEnabled) speech.speak(result.answer);
     } catch {
@@ -138,24 +217,33 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
   }
 
   return (
-    <section className="assistant-panel" aria-labelledby="assistant-title">
-      <header className="assistant-panel__header">
+    <section
+      className="assistant-panel flex flex-col h-full bg-surface text-ink"
+      aria-labelledby="assistant-title"
+    >
+      <header className="flex items-start justify-between gap-3 px-4 py-3 border-b border-line">
         <div>
-          <h1 id="assistant-title">Adaptly Assistant</h1>
-          <p>Support for the section you&apos;re studying.</p>
+          <h2 id="assistant-title" className="m-0 text-base font-semibold">
+            Adaptly Assistant
+          </h2>
+          <p className="m-0 mt-0.5 text-xs text-muted">
+            Support for the section you&apos;re studying.
+          </p>
         </div>
         {speech.isSupported && (
-          <label className="voice-toggle">
+          <label className="inline-flex items-center gap-1.5 text-xs text-muted whitespace-nowrap shrink-0">
             <input
               type="checkbox"
               checked={voiceResponsesEnabled}
               onChange={(event) => setVoiceResponsesEnabled(event.target.checked)}
+              className="accent-accent"
             />
             Voice responses
           </label>
         )}
       </header>
-      <div className="assistant-panel__messages">
+
+      <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
         <MessageList
           messages={messages}
           isLoading={isLoading}
@@ -166,19 +254,34 @@ export function AssistantPanel({ apiClient = sendAssistantMessage, studyContext 
           onStop={speech.stop}
         />
       </div>
+
       <SuggestedQuestions
         questions={suggestedQuestions}
         onSelect={handleSuggestedQuestionSelect}
         disabled={isLoading}
       />
+
       {error && (
-        <div className="assistant-error" role="alert">
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 mx-4 mb-2 px-3 py-2 rounded-md
+                     border-l-4 border-l-warning bg-warning-soft text-ink text-sm"
+        >
           <span>{error}</span>
-          <button type="button" onClick={retryFailedQuestion} disabled={isLoading}>
+          <button
+            type="button"
+            onClick={retryFailedQuestion}
+            disabled={isLoading}
+            className="inline-flex items-center gap-1 shrink-0 rounded-md border border-line-strong
+                       bg-surface px-2.5 py-1 text-xs font-medium hover:bg-page
+                       disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-150"
+          >
+            <RefreshCw size={12} strokeWidth={1.75} aria-hidden="true" />
             Retry
           </button>
         </div>
       )}
+
       <QuestionInput
         value={input}
         onChange={handleManualInputChange}

@@ -1,3 +1,5 @@
+import { Clock, Coffee, ListChecks, MessageCircleQuestion, Wand2 } from "lucide-react";
+
 import { formatDurationSeconds, NOT_AVAILABLE } from "./format";
 import {
   DELIVERY_STATUS_LABELS,
@@ -5,6 +7,16 @@ import {
   INTERVENTION_TYPE_LABELS,
   OUTCOME_LABELS,
 } from "./labels";
+
+/** Same four icons InterventionHost uses live, so a learner sees one
+    consistent visual vocabulary for "what kind of support was this" whether
+    they are looking at it during the session or afterwards in this log. */
+const TYPE_ICONS = {
+  simplify_content: Wand2,
+  bullet_summary: ListChecks,
+  break_suggestion: Coffee,
+  assistant_help_prompt: MessageCircleQuestion,
+};
 
 /**
  * The itemized companion to `InterventionSection`'s totals (Issue #30):
@@ -24,9 +36,13 @@ export default function InterventionLog({ interventions, sessionStartIso }) {
 
   if (!hasEvents) {
     return (
-      <section aria-labelledby="intervention-log-heading">
-        <h2 id="intervention-log-heading">Support log</h2>
-        <p>There&apos;s nothing logged here — no individual support events for this session.</p>
+      <section aria-labelledby="intervention-log-heading" className="mb-4">
+        <h2 id="intervention-log-heading" className="text-lg font-semibold mb-2">
+          Support log
+        </h2>
+        <p className="text-muted">
+          There&apos;s nothing logged here — no individual support events for this session.
+        </p>
       </section>
     );
   }
@@ -37,9 +53,11 @@ export default function InterventionLog({ interventions, sessionStartIso }) {
   );
 
   return (
-    <section aria-labelledby="intervention-log-heading">
-      <h2 id="intervention-log-heading">Support log</h2>
-      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+    <section aria-labelledby="intervention-log-heading" className="mb-4">
+      <h2 id="intervention-log-heading" className="text-lg font-semibold mb-2">
+        Support log
+      </h2>
+      <ul className="list-none p-0 m-0 space-y-2">
         {sorted.map((event) => {
           const eventMs = new Date(event.timestamp).getTime();
           const elapsedLabel =
@@ -54,29 +72,29 @@ export default function InterventionLog({ interventions, sessionStartIso }) {
           const deliveryLabel =
             DELIVERY_STATUS_LABELS[event.delivery_status] ?? event.delivery_status;
           const outcomeLabel = OUTCOME_LABELS[event.outcome] ?? event.outcome;
+          const TypeIcon = TYPE_ICONS[event.intervention_type] ?? MessageCircleQuestion;
 
           return (
             <li
               key={event.intervention_id}
-              style={{
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                padding: "0.75rem 1rem",
-                margin: "0 0 0.6rem",
-              }}
+              className="rounded-card border border-line bg-surface shadow-card p-4"
             >
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", color: "#555" }}>
-                <span>{elapsedLabel} into the session</span>
+              <div className="flex justify-between text-xs text-muted">
+                <span className="flex items-center gap-1">
+                  <Clock size={12} strokeWidth={1.75} aria-hidden="true" />
+                  {elapsedLabel} into the session
+                </span>
                 <span>{deliveryLabel}</span>
               </div>
-              <p style={{ margin: "0.3rem 0 0", fontWeight: 600 }}>{typeLabel}</p>
-              {event.reason && <p style={{ margin: "0.2rem 0 0" }}>{event.reason}</p>}
-              <p style={{ margin: "0.2rem 0 0", fontSize: "0.9rem" }}>
-                Prompted while: {stateLabel}
+              <p className="flex items-center gap-1.5 mt-1.5 mb-0 font-semibold text-ink">
+                <TypeIcon size={15} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                {typeLabel}
               </p>
-              <p style={{ margin: "0.2rem 0 0", fontSize: "0.9rem" }}>{outcomeLabel}</p>
+              {event.reason && <p className="mt-1 mb-0 text-sm text-ink">{event.reason}</p>}
+              <p className="mt-1 mb-0 text-sm text-muted">Prompted while: {stateLabel}</p>
+              <p className="mt-1 mb-0 text-sm text-ink">{outcomeLabel}</p>
               {event.recovery_duration_seconds != null && (
-                <p style={{ margin: "0.2rem 0 0", fontSize: "0.85rem", color: "#555" }}>
+                <p className="mt-1 mb-0 text-xs text-muted">
                   Back on track after {formatDurationSeconds(event.recovery_duration_seconds)}
                 </p>
               )}

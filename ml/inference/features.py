@@ -137,16 +137,28 @@ def eyebrow_eye_distance(landmarks, eyebrow_indices, eye_upper_indices) -> float
     return math.dist(avg_point(eyebrow_indices), avg_point(eye_upper_indices))
 
 
-def extract_features(landmarks, *, validate: bool = True):
+def extract_features(landmarks, *, validate: bool = True, use_real_head_pose: bool = False):
     """
-    Return the 9 features in FEATURE_NAMES order, or None if landmarks are absent.
+    Return the 9 features in FEATURE_NAMES order, or None if landmarks are
+    absent or (use_real_head_pose only) the pose could not be solved.
 
     KNOWN LIMITATION — blink_rate is not a blink rate. It is the same eye-aspect
     ratio value as eye_openness, because a blink lasts 100-400 ms and frames are
     sampled once per second, so a genuine blink rate cannot be measured from
     this input at all. Correcting it requires both a higher sampling rate and a
     retrain, since the model was fitted on the duplicated value. Documented in
-    docs/model/model-card.md rather than silently carried.
+    docs/model/model-card.md rather than silently carried. Tracked as Phase 1b
+    of docs/superpowers/specs/2026-10-03-engagement-model-accuracy-phase1-design.md.
+
+    `use_real_head_pose` (default False - MUST stay False for every existing
+    caller): opts into real `cv2.solvePnP` pose (head_pose.py) instead of the
+    simplified nose/chin formula. Exists only for the retraining pipeline that
+    produces a NEW model fitted on real pose values - the currently shipped
+    `best_model_9f.keras`/`scaler_9f.pkl` were fitted on the simplified
+    formula, and feeding them real-degree pose would be out-of-distribution
+    input (see estimate_head_pose's own docstring and the model card). Never
+    pass True from the live engagement route until a model trained on real
+    pose actually replaces the shipped one.
     """
     if landmarks is None:
         return None
@@ -161,7 +173,18 @@ def extract_features(landmarks, *, validate: bool = True):
     blink_rate = ear        # see the limitation above
     eye_openness = ear
 
-    pitch, yaw, roll = estimate_head_pose(landmarks)
+    if use_real_head_pose:
+        from ml.inference import head_pose
+
+        pose = head_pose.solve_head_pose(landmarks)
+        if pose is None:
+            # Degenerate geometry - the simplified formula never failed here,
+            # but a real solvePnP can. Treated as an unusable frame, same as
+            # landmarks=None above, rather than a silently fake (0, 0, 0).
+            return None
+        pitch, yaw, roll = pose
+    else:
+        pitch, yaw, roll = estimate_head_pose(landmarks)
     gaze_x, gaze_y = gaze_direction(landmarks)
 
     brow_raise = (

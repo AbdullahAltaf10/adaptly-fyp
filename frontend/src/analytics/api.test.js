@@ -113,7 +113,20 @@ describe("fetchSessionAnalytics", () => {
         duration_seconds: 60,
       },
       insightReport: { status: "generated", report_text: "Nice session." },
+      interventions: [],
     });
+  });
+
+  it("passes the per-intervention rows through so the session log can show them", async () => {
+    const rows = [
+      { timestamp: "2026-10-04T10:01:00Z", intervention_type: "bullet_summary", reason: "Signs of difficulty",
+        delivery_status: "displayed", outcome: "unknown", helped: null },
+    ];
+    api.get.mockResolvedValueOnce({ data: { session_id: "session-1", interventions: rows } });
+
+    const result = await fetchSessionAnalytics("session-1");
+
+    expect(result.interventions).toEqual(rows);
   });
 
   it("maps a 404 to the not_found error kind", async () => {

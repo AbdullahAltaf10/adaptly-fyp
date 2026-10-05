@@ -78,6 +78,7 @@ def _fetch(uid: str, content_id: str, chunk_id: str) -> dict | None:
                 "chunk_id": str(chunk.get("chunk_id")),
                 "text": chunk.get("text") or "",
                 "is_critical": bool(chunk.get("is_critical")),
+                "order": chunk.get("order"),
             }
     return None
 
@@ -113,6 +114,18 @@ def is_critical(uid: str, content_id: str, chunk_id: str) -> bool:
     """
     chunk = get_chunk(uid, content_id, chunk_id)
     return bool(chunk and chunk["is_critical"])
+
+
+def chunk_order(uid: str, content_id: str, chunk_id: str) -> int | None:
+    """
+    This chunk's position in the content's reading order, read from the
+    stored chunk - never from the request. Used by engagement/rereading.py's
+    paragraph-revisit proxy; a client-supplied order would let a browser
+    manufacture a revisit detection that never happened, the same trust gap
+    `is_critical` already closed for its own field.
+    """
+    chunk = get_chunk(uid, content_id, chunk_id)
+    return chunk["order"] if chunk else None
 
 
 def reset_cache() -> None:

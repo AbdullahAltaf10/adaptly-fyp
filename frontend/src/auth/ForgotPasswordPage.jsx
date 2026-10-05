@@ -14,28 +14,33 @@
  * because those are problems the learner can act on.
  */
 
+import { KeyRound, Mail, MailCheck, Send } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { sendPasswordResetEmail } from "firebase/auth";
 
 import { auth } from "./firebase";
-import { collectErrors, describeAuthError, validateEmail } from "./validation";
+import { describeAuthError, validateEmail } from "./validation";
 import { Alert, Button, Card, CenteredPage, Field, Input } from "../ui";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
-  const [errors, setErrors] = useState({});
+  const [emailTouched, setEmailTouched] = useState(false);
   const [error, setError] = useState(null);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Live once the field is left, not only on submit - the same reason as
+  // every other form here: a malformed address should not wait for a click
+  // to be worth mentioning.
+  const emailError = validateEmail(email);
+  const errors = { email: emailTouched ? emailError : null };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError(null);
-
-    const found = collectErrors({ email: validateEmail(email) });
-    setErrors(found);
-    if (Object.keys(found).length > 0) return;
+    setEmailTouched(true);
+    if (emailError) return;
 
     setBusy(true);
     try {
@@ -56,14 +61,27 @@ export default function ForgotPasswordPage() {
   return (
     <CenteredPage>
       <Card
-        title="Reset your password"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <KeyRound size={20} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+            Reset your password
+          </span>
+        }
         subtitle="We will email you a link to choose a new one."
       >
         {error && <Alert tone="error">{error}</Alert>}
 
         {sent ? (
           <>
-            <Alert tone="success" title="Check your inbox">
+            <Alert
+              tone="success"
+              title={
+                <span className="inline-flex items-center gap-1.5">
+                  <MailCheck size={16} strokeWidth={1.75} aria-hidden="true" />
+                  Check your inbox
+                </span>
+              }
+            >
               If there is an Adaptly account for <strong>{email.trim()}</strong>, a reset link is
               on its way. It can take a minute, and it may land in spam.
             </Alert>
@@ -73,7 +91,16 @@ export default function ForgotPasswordPage() {
           </>
         ) : (
           <form onSubmit={handleSubmit} noValidate>
-            <Field label="Email address" error={errors.email} required>
+            <Field
+              label={
+                <span className="inline-flex items-center gap-1.5">
+                  <Mail size={14} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                  Email address
+                </span>
+              }
+              error={errors.email}
+              required
+            >
               {(aria) => (
                 <Input
                   {...aria}
@@ -84,11 +111,13 @@ export default function ForgotPasswordPage() {
                   value={email}
                   invalid={Boolean(errors.email)}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => setEmailTouched(true)}
                 />
               )}
             </Field>
 
             <Button type="submit" className="w-full" busy={busy} busyLabel="Sending...">
+              <Send size={16} strokeWidth={1.75} aria-hidden="true" />
               Send reset link
             </Button>
           </form>

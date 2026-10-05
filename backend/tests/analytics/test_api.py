@@ -649,7 +649,9 @@ class ResponseContractCompatibilityTests(unittest.TestCase):
         response = client.get("/api/sessions/session-1/analytics")
 
         body = response.json()
-        contract_only = {key: value for key, value in body.items() if key != "insight_report"}
+        # insight_report and interventions are wrappers added to the stored
+        # summary for the page; the summary contract covers only the summary.
+        contract_only = {key: value for key, value in body.items() if key not in ("insight_report", "interventions")}
         assert_schema_match(contract_only, _schema("session-summary.schema.json"))
 
 

@@ -187,6 +187,61 @@ def test_cannot_escalate_role_through_profile_update(fake_db):
     assert profile["corporate_role"] is None
 
 
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"font": "banana"},                 # not in the contract's enum
+        {"font": "serif"},                  # what the frontend used to send
+        {"line_spacing": "loose"},          # a name; the contract wants a number
+        {"line_spacing": 0.5},              # below the 1-3 range
+        {"line_spacing": 4},                # above it
+        {"line_spacing": True},             # bool is an int in Python
+        {"high_contrast": "yes"},
+        {"focus_isolation": 1},
+    ],
+)
+def test_accessibility_values_that_break_the_contract_are_rejected(fake_db, settings):
+    as_user()
+    client.post("/users/register", params={"mode": "learner"})
+    before = fake_db.users.find_one({"uid": "u1"})["accessibility_settings"]
+
+    r = client.put("/users/me", json={"accessibility_settings": settings})
+
+    assert r.status_code == 400
+    assert fake_db.users.find_one({"uid": "u1"})["accessibility_settings"] == before, (
+        "a rejected update must not be partly applied"
+    )
+
+
+@pytest.mark.parametrize(
+    "prefs",
+    [
+        {"preferred_content_mode": "video"},
+        {"voice_responses_enabled": "true"},
+        {"preferred_voice_speed": 5},
+        {"preferred_voice_speed": 0.1},
+    ],
+)
+def test_study_preference_values_that_break_the_contract_are_rejected(fake_db, prefs):
+    as_user()
+    client.post("/users/register", params={"mode": "learner"})
+    assert client.put("/users/me", json={"study_preferences": prefs}).status_code == 400
+
+
+def test_values_inside_the_contract_are_accepted(fake_db):
+    as_user()
+    client.post("/users/register", params={"mode": "learner"})
+    r = client.put(
+        "/users/me",
+        json={"accessibility_settings": {
+            "font": "opendyslexic", "line_spacing": 1.75,
+            "high_contrast": True, "focus_isolation": False,
+        }},
+    )
+    assert r.status_code == 200
+    assert r.json()["accessibility_settings"]["line_spacing"] == 1.75
+
+
 def test_unknown_settings_keys_are_stripped(fake_db):
     as_user()
     client.post("/users/register", params={"mode": "learner"})

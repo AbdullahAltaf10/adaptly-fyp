@@ -114,6 +114,45 @@ def test_extraction_can_skip_validation_for_speed():
 
 
 # --------------------------------------------------------------------------
+# Real head pose (opt-in, Phase 1 of the 2026-10-03 accuracy work) - must
+# NOT change extract_features' default behavior, since the currently
+# shipped model/scaler were fitted on the simplified formula (see
+# docs/model/model-card.md and features.py's own estimate_head_pose
+# docstring). use_real_head_pose=False (the default) must remain
+# byte-for-byte what it always was.
+# --------------------------------------------------------------------------
+
+def test_use_real_head_pose_defaults_to_false_and_changes_nothing():
+    landmarks = make_landmarks(3)
+    assert extract_features(landmarks) == extract_features(landmarks, use_real_head_pose=False)
+
+
+def test_use_real_head_pose_true_produces_different_pitch_yaw_roll():
+    landmarks = make_landmarks(3)
+    simplified = extract_features(landmarks)
+    real = extract_features(landmarks, use_real_head_pose=True)
+    pitch_i, yaw_i, roll_i = (FEATURE_NAMES.index(n) for n in ("pitch", "yaw", "roll"))
+    assert (simplified[pitch_i], simplified[yaw_i], simplified[roll_i]) != (
+        real[pitch_i], real[yaw_i], real[roll_i],
+    )
+    # Every other feature is untouched by the pose source.
+    for i in range(len(FEATURE_NAMES)):
+        if i in (pitch_i, yaw_i, roll_i):
+            continue
+        assert simplified[i] == real[i]
+
+
+def test_use_real_head_pose_returns_none_for_the_whole_frame_when_geometry_is_degenerate(monkeypatch):
+    """solve_head_pose can return None (degenerate geometry) where the old
+    simplified formula never failed. Treated the same as missing landmarks -
+    the frame is unusable, not silently given a fake zero pose."""
+    from ml.inference import head_pose
+
+    monkeypatch.setattr(head_pose, "solve_head_pose", lambda landmarks: None)
+    assert extract_features(make_landmarks(), use_real_head_pose=True) is None
+
+
+# --------------------------------------------------------------------------
 # Artifacts and model — smoke test
 # --------------------------------------------------------------------------
 
@@ -130,6 +169,17 @@ def test_manifest_records_shape_and_class_mapping():
     assert manifest["input_shape"] == [10, 9]
     assert manifest["class_mapping"] == {"0": "focused", "1": "drifting", "2": "struggling"}
     assert manifest["feature_order"] == FEATURE_NAMES
+
+
+def test_the_applied_threshold_is_the_one_the_manifest_documents():
+    # The code applies 0.36 while the manifest also carries the exported
+    # artifact's own 0.34. Both are legitimate and both are explained in the
+    # manifest - but the explanation is only trustworthy while it names the
+    # number that is actually applied, so changing one without the other fails.
+    variant = ml_model.load_manifest()["calibrated_variant"]
+    assert variant["production_threshold"] == ml_model.CALIBRATED_STRUGGLING_THRESHOLD
+    assert variant["recommended_threshold"] != variant["production_threshold"]
+    assert "production_threshold_note" in variant
 
 
 def test_model_loads_and_predicts():
@@ -152,3 +202,35 @@ def test_wrong_window_length_rejected():
 def test_wrong_feature_count_rejected():
     with pytest.raises(ValueError):
         ml_model.predict([[0.0] * 7] * 10)
+
+
+def _stub_predict(monkeypatch, probs):
+    import numpy as np
+
+    class _Model:
+        def predict(self, x, verbose=0):
+            return np.array([probs])
+
+    class _Scaler:
+        def transform(self, a):
+            return a
+
+    monkeypatch.setattr(ml_model, "load_model", lambda calibrated=False: (_Model(), _Scaler()))
+
+
+def test_threshold_rule_flags_struggling_at_or_above_the_threshold(monkeypatch):
+    _stub_predict(monkeypatch, [0.2, 0.2, 0.6])
+    result = ml_model.predict([[0.0] * 9] * 10, struggling_threshold=0.40, drifting_weight=0.5)
+    assert result["state"] == "struggling"
+
+
+def test_threshold_rule_down_weights_drifting_below_the_threshold(monkeypatch):
+    _stub_predict(monkeypatch, [0.5, 0.45, 0.05])
+    result = ml_model.predict([[0.0] * 9] * 10, struggling_threshold=0.40, drifting_weight=0.5)
+    assert result["state"] == "focused"
+
+
+def test_uncalibrated_path_is_plain_argmax_and_ignores_the_weight(monkeypatch):
+    _stub_predict(monkeypatch, [0.2, 0.5, 0.3])
+    result = ml_model.predict([[0.0] * 9] * 10, drifting_weight=0.1)
+    assert result["state"] == "drifting"

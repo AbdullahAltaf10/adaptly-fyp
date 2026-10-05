@@ -29,11 +29,20 @@ landmark coordinates and nothing else.
 | Data | Stored? | Notes |
 |---|---|---|
 | 478 landmark points per frame | **No** | Held in memory for the request, converted to 9 features, discarded |
-| The 9 derived features | **No** | Used for the prediction, then discarded |
-| Calibration baseline | **Yes** | 9 numbers plus a head-pose baseline, per user |
-| Engagement state + confidence | Returned | Persisted only when Module 8 exists |
+| The 9 derived features, per frame | **No** | Used for the prediction, then discarded |
+| The window **mean** of those 9 features | **Yes** | One averaged value per feature, per window, stored on the engagement event (`gaze_x`, `head_pitch`, `brow_raise`, ...). Calibration-corrected. Kept so Module 8 and any later evaluation can see the signal behind a label. Not a landmark, not a frame, not enough to reconstruct a face |
+| Calibration baseline | **Yes** | 9 numbers plus a head-pose baseline and a brow baseline, per user |
+| Engagement state + confidence | **Yes** | Stored by Module 8 as an engagement event, about one per second of session |
 
 Landmarks are never written to the database and never written to a log.
+
+This table previously said the derived features were not stored, and that state
+was persisted only "when Module 8 exists". Both were true when written and
+stopped being true once Module 8 was wired in (`engagement/analytics_sink.py`);
+the window-mean features have been in every stored event since. Storage is
+limited by `analytics/persistence/field_allowlists.py`, which drops anything
+not on the contract's list, so a landmark blob attached to an event by mistake
+is discarded rather than written.
 
 ## Are facial landmarks personal data?
 

@@ -7,37 +7,23 @@ import { NOT_AVAILABLE } from "./format";
  * happens in the caller via `src/analytics/format.js`, so this component
  * stays a plain, easily-testable presentational box.
  */
-export default function SummaryCard({ label, value, description }) {
+export default function SummaryCard({ label, value, description, icon: Icon }) {
   const isUnavailable = value === NOT_AVAILABLE;
 
   return (
     <div
       role="group"
       aria-label={label}
-      style={{
-        border: "1px solid #ddd",
-        borderRadius: "8px",
-        padding: "0.9rem 1rem",
-        minWidth: "160px",
-        background: "#fff",
-      }}
+      className="rounded-card border border-line bg-surface shadow-card px-4 py-3.5 min-w-[160px]"
     >
-      <p style={{ margin: 0, fontSize: "0.85rem", color: "#555" }}>{label}</p>
-      <p
-        style={{
-          margin: "0.3rem 0 0",
-          fontSize: "1.4rem",
-          fontWeight: 600,
-          color: isUnavailable ? "#777" : "#1a1a1a",
-        }}
-      >
+      <p className="m-0 flex items-center gap-1.5 text-sm text-muted">
+        {Icon && <Icon size={14} strokeWidth={1.75} className="shrink-0 text-accent" aria-hidden="true" />}
+        {label}
+      </p>
+      <p className={`mt-1 mb-0 text-2xl font-semibold ${isUnavailable ? "text-muted" : "text-ink"}`}>
         {value}
       </p>
-      {description && (
-        <p style={{ margin: "0.3rem 0 0", fontSize: "0.8rem", color: "#666" }}>
-          {description}
-        </p>
-      )}
+      {description && <p className="mt-1 mb-0 text-xs text-muted">{description}</p>}
     </div>
   );
 }

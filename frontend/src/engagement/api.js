@@ -46,6 +46,18 @@ export function calibrate(frames) {
 }
 
 /**
+ * Whether this learner already has a stored baseline.
+ *
+ * Checked once at session setup so a never-calibrated learner can be
+ * silently calibrated on their own first few seconds (2026-09-30 audit -
+ * see useEngagementCapture.js), without making an already-calibrated
+ * returning learner sit through another calibration pass every visit.
+ */
+export function fetchCalibrationStatus() {
+  return api.get("/engagement/calibration-status");
+}
+
+/**
  * Send one window for classification.
  *
  * `frames` is an array of `[[x, y, z], ...]` or null entries. Only numbers are

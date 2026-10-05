@@ -17,6 +17,8 @@
  * migration will replace, not something other pages should build on top of.
  */
 
+import { LifeBuoy, MessageCircle, RotateCcw, Timer, TrendingUp } from "lucide-react";
+
 import ActiveSessionNotice from "../analytics/ActiveSessionNotice";
 import EngagementSection from "../analytics/EngagementSection";
 import EngagementTimeline from "../analytics/EngagementTimeline";
@@ -31,6 +33,7 @@ import InsightReport from "../analytics/InsightReport";
 import InterventionLog from "../analytics/InterventionLog";
 import InterventionSection from "../analytics/InterventionSection";
 import LoadingState from "../analytics/LoadingState";
+import { isEngagementMeasured } from "../analytics/EngagementSection";
 import SessionOverview from "../analytics/SessionOverview";
 import SummaryCard from "../analytics/SummaryCard";
 import { useSessionAnalytics } from "../analytics/useSessionAnalytics";
@@ -59,16 +62,20 @@ export default function AnalyticsDashboard({
 
   if (!isCompleted) {
     return (
-      <main aria-labelledby="analytics-dashboard-heading">
-        <h1 id="analytics-dashboard-heading">Session summary</h1>
+      <main aria-labelledby="analytics-dashboard-heading" className="max-w-3xl mx-auto px-4 py-6">
+        <h1 id="analytics-dashboard-heading" className="text-2xl font-semibold mb-4">
+          Session summary
+        </h1>
         <ActiveSessionNotice />
       </main>
     );
   }
 
   return (
-    <main aria-labelledby="analytics-dashboard-heading">
-      <h1 id="analytics-dashboard-heading">Session summary</h1>
+    <main aria-labelledby="analytics-dashboard-heading" className="max-w-3xl mx-auto px-4 py-6">
+      <h1 id="analytics-dashboard-heading" className="text-2xl font-semibold mb-4">
+        Session summary
+      </h1>
 
       {status === "loading" && <LoadingState />}
       {status === "error" && <ErrorState kind={error?.kind} />}
@@ -77,30 +84,37 @@ export default function AnalyticsDashboard({
         <>
           <SessionOverview overview={data.overview} summary={data.summary} />
 
-          <section aria-labelledby="key-numbers-heading">
-            <h2 id="key-numbers-heading">Key numbers</h2>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+          <section aria-labelledby="key-numbers-heading" className="mb-4">
+            <h2 id="key-numbers-heading" className="text-lg font-semibold mb-2">
+              Key numbers
+            </h2>
+            <div className="flex flex-wrap gap-3">
               <SummaryCard
+                icon={Timer}
                 label="Longest focused period"
                 value={formatDurationSeconds(
                   data.summary.longest_focused_period?.duration_seconds ?? null
                 )}
               />
               <SummaryCard
+                icon={RotateCcw}
                 label="Average recovery time"
                 value={formatDurationSeconds(
                   data.summary.recovery_metrics.average_recovery_time_seconds
                 )}
               />
               <SummaryCard
+                icon={TrendingUp}
                 label="Recovery rate"
                 value={formatFraction(data.summary.recovery_metrics.recovery_rate)}
               />
               <SummaryCard
+                icon={LifeBuoy}
                 label="Support offered"
                 value={formatCount(data.summary.intervention_metrics.total_count)}
               />
               <SummaryCard
+                icon={MessageCircle}
                 label="Assistant interactions"
                 value={formatCount(data.summary.assistant_usage.total_event_count)}
               />
@@ -114,7 +128,10 @@ export default function AnalyticsDashboard({
             totalDurationSeconds={data.summary.duration_seconds}
             sessionStartIso={computeSessionStartIso(data.summary)}
           />
-          <InterventionSection interventionMetrics={data.summary.intervention_metrics} />
+          <InterventionSection
+            interventionMetrics={data.summary.intervention_metrics}
+            engagementMeasured={isEngagementMeasured(data.summary.engagement_distribution)}
+          />
           <InterventionLog
             interventions={data.interventions}
             sessionStartIso={computeSessionStartIso(data.summary)}

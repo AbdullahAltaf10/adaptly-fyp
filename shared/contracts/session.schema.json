@@ -27,7 +27,7 @@
       "minLength": 1
     },
     "content_id": {
-      "type": "string",
+      "type": ["string", "null"],
       "minLength": 1
     },
     "status": {

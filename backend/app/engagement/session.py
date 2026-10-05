@@ -22,7 +22,7 @@ however the endpoint is called.
 import threading
 import time
 
-from app.engagement import deep_thinking, fatigue, furrow, recovery, smoothing
+from app.engagement import deep_thinking, fatigue, furrow, recovery, rereading, smoothing
 
 SESSION_TTL_SECONDS = 1800
 
@@ -53,7 +53,7 @@ def _evict_stale(now):
 
 def _clear_rule_state(uid, session_id):
     """Reset every rule that keeps per-session history."""
-    for module in (smoothing, fatigue, recovery, deep_thinking, furrow):
+    for module in (smoothing, fatigue, recovery, deep_thinking, furrow, rereading):
         try:
             module.reset(uid, session_id)
         except Exception:

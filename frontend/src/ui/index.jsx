@@ -44,7 +44,10 @@ export function Button({
       disabled={disabled || busy}
       aria-busy={busy || undefined}
       className={[
-        "inline-flex items-center justify-center min-h-10 px-4 py-2",
+        // gap-1.5 so an icon passed as a child sits a sane distance from the
+        // label - added because several call sites started doing
+        // <Icon /> label without it, which rendered touching with no space.
+        "inline-flex items-center justify-center gap-1.5 min-h-10 px-4 py-2",
         "rounded-md border font-medium transition-colors",
         "disabled:cursor-not-allowed disabled:opacity-60",
         BUTTON_VARIANTS[variant] ?? BUTTON_VARIANTS.primary,

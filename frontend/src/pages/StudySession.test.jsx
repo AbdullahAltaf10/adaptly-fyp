@@ -8,6 +8,7 @@
  */
 
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const baseCapture = {
@@ -25,6 +26,7 @@ const baseCapture = {
   droppedWindows: 0,
   prediction: null,
   sessionId: "live-session-123",
+  endSessionNow: () => Promise.resolve({}),
 };
 
 vi.mock("../engagement/useEngagementCapture", () => ({
@@ -39,7 +41,7 @@ vi.mock("../engagement/useFacePresence", () => ({
   }),
 }));
 vi.mock("../intervention/useDwell", () => ({
-  useDwell: () => ({ seconds: () => 0, register: vi.fn() }),
+  useDwell: () => ({ seconds: () => 0, register: vi.fn(), visibilityRatios: () => new Map() }),
 }));
 vi.mock("../intervention/useIntervention", () => ({
   useIntervention: () => ({
@@ -104,12 +106,16 @@ describe("StudySession — assistant panel", () => {
   });
 
   it("does not offer the assistant before a session has started", () => {
-    render(<StudySession contentId="content-1" chunkId="chunk-1" />);
+    render(
+      <MemoryRouter><StudySession contentId="content-1" chunkId="chunk-1" /></MemoryRouter>
+    );
     expect(screen.queryByRole("button", { name: /ask the assistant/i })).not.toBeInTheDocument();
   });
 
   it("is collapsed by default once a session starts, and toggles open/closed", () => {
-    render(<StudySession contentId="content-1" chunkId="chunk-1" />);
+    render(
+      <MemoryRouter><StudySession contentId="content-1" chunkId="chunk-1" /></MemoryRouter>
+    );
     startSession();
 
     expect(screen.queryByTestId("assistant-panel")).not.toBeInTheDocument();
@@ -122,7 +128,9 @@ describe("StudySession — assistant panel", () => {
   });
 
   it("passes the real live session_id, content_id, and chunk_id as context", () => {
-    render(<StudySession contentId="content-42" chunkId="chunk-7" />);
+    render(
+      <MemoryRouter><StudySession contentId="content-42" chunkId="chunk-7" /></MemoryRouter>
+    );
     startSession();
     fireEvent.click(screen.getByRole("button", { name: /ask the assistant/i }));
 
@@ -133,7 +141,9 @@ describe("StudySession — assistant panel", () => {
   });
 
   it("falls back to placeholder context fields when no document is loaded", () => {
-    render(<StudySession contentId="content-42" chunkId="chunk-7" />);
+    render(
+      <MemoryRouter><StudySession contentId="content-42" chunkId="chunk-7" /></MemoryRouter>
+    );
     startSession();
     fireEvent.click(screen.getByRole("button", { name: /ask the assistant/i }));
 
@@ -165,7 +175,9 @@ describe("StudySession — assistant panel", () => {
       },
     };
 
-    render(<StudySession contentId="content-42" chunkId="chunk-7" />);
+    render(
+      <MemoryRouter><StudySession contentId="content-42" chunkId="chunk-7" /></MemoryRouter>
+    );
     startSession();
     fireEvent.click(screen.getByRole("button", { name: /ask the assistant/i }));
 
@@ -186,7 +198,9 @@ describe("StudySession — assistant panel", () => {
   });
 
   it("keeps the rest of the study screen intact if mounting/toggling the assistant is exercised repeatedly", () => {
-    render(<StudySession contentId="content-1" chunkId="chunk-1" />);
+    render(
+      <MemoryRouter><StudySession contentId="content-1" chunkId="chunk-1" /></MemoryRouter>
+    );
     startSession();
 
     const toggle = screen.getByRole("button", { name: /ask the assistant/i });

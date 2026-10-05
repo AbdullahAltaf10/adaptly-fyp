@@ -7,10 +7,10 @@
  * `role="status"` + `aria-live="polite"` announce it to screen readers
  * without interrupting anything.
  */
-export default function LoadingState() {
+export default function LoadingState({ label = "Loading your session summary..." }) {
   return (
     <div role="status" aria-live="polite">
-      <p>Loading your session summary...</p>
+      <p>{label}</p>
     </div>
   );
 }

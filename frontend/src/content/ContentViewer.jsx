@@ -26,6 +26,8 @@
 
 import { useCallback } from "react";
 
+const HIGHLIGHT_CONFIDENCE_THRESHOLD = 0.3;
+
 /**
  * `is_critical` comes from Module 9's HR tagging. Module 4 already halves its
  * dwell threshold for these, so difficulty is caught sooner where
@@ -33,7 +35,7 @@ import { useCallback } from "react";
  * marking a paragraph "critical" on screen is pressure, and scope section 6.4
  * asks for support delivered without disruption.
  */
-function ContentChunk({ chunk, onChunkRef }) {
+function ContentChunk({ chunk, onChunkRef, isFocused }) {
   const ref = useCallback(
     (element) => {
       if (onChunkRef) onChunkRef(chunk.chunk_id, element);
@@ -42,7 +44,12 @@ function ContentChunk({ chunk, onChunkRef }) {
   );
 
   return (
-    <section ref={ref} data-chunk-id={chunk.chunk_id} style={{ marginBottom: "1.75rem" }}>
+    <section
+      ref={ref}
+      data-chunk-id={chunk.chunk_id}
+      className={isFocused ? "bg-accent/10 rounded-md" : undefined}
+      style={{ marginBottom: "1.75rem", transition: "background-color 300ms ease" }}
+    >
       {chunk.section_title && (
         <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.05rem" }}>
           {chunk.section_title}
@@ -53,7 +60,13 @@ function ContentChunk({ chunk, onChunkRef }) {
   );
 }
 
-export default function ContentViewer({ content, onChunkRef, lineSpacing = 1.7 }) {
+export default function ContentViewer({
+  content,
+  onChunkRef,
+  lineSpacing = 1.7,
+  activeChunkId = null,
+  fusionConfidence = 0,
+}) {
   if (!content) {
     return (
       <section aria-labelledby="content-heading">
@@ -80,7 +93,15 @@ export default function ContentViewer({ content, onChunkRef, lineSpacing = 1.7 }
       ) : (
         <div style={{ lineHeight: lineSpacing, maxWidth: "70ch" }}>
           {ordered.map((chunk) => (
-            <ContentChunk key={chunk.chunk_id} chunk={chunk} onChunkRef={onChunkRef} />
+            <ContentChunk
+              key={chunk.chunk_id}
+              chunk={chunk}
+              onChunkRef={onChunkRef}
+              isFocused={
+                chunk.chunk_id === activeChunkId
+                && fusionConfidence >= HIGHLIGHT_CONFIDENCE_THRESHOLD
+              }
+            />
           ))}
         </div>
       )}

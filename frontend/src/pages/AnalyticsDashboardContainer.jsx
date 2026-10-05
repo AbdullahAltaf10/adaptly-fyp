@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import {
   fetchMostRecentCompletedSession,
@@ -29,11 +30,30 @@ export default function AnalyticsDashboardContainer({
   fetchAnalytics = fetchSessionAnalytics,
   requestReport = requestInsightReport,
 }) {
+  // `?session=` lets the history list link back to an older session. Without
+  // it every link would quietly land on the most recent one instead, which is
+  // worse than having no links at all.
+  const [searchParams] = useSearchParams();
+  const requestedSessionId = searchParams.get("session");
+
   const [state, setState] = useState({ status: "loading", session: null, error: null });
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading", session: null, error: null });
+
+    if (requestedSessionId) {
+      // A session named in the URL needs no lookup: the analytics fetch below
+      // is keyed by id, and it is the request that decides whether this
+      // learner may see it. Asking for someone else's id fails there, on the
+      // server, rather than here.
+      setState({
+        status: "ready",
+        session: { session_id: requestedSessionId },
+        error: null,
+      });
+      return undefined;
+    }
 
     fetchRecentSession()
       .then((session) => {
@@ -51,7 +71,7 @@ export default function AnalyticsDashboardContainer({
     return () => {
       cancelled = true;
     };
-  }, [fetchRecentSession]);
+  }, [fetchRecentSession, requestedSessionId]);
 
   // What InsightReport calls to have this session's summary written. Kept here
   // because this is the component that knows the session id and how to refetch.

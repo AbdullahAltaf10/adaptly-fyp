@@ -5,12 +5,64 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.ai_assistant.analytics_contracts import build_assistant_events
 from app.ai_assistant.analytics_sink import record_assistant_exchange
 from app.engagement import latest_state
-from app.ai_assistant.schemas import AssistantMessageRequest, AssistantMessageResponse
+from app.ai_assistant import history_store
+from app.ai_assistant.schemas import (
+    AssistantMessageRequest,
+    AssistantMessageResponse,
+    HistoryMessage,
+    HistoryResponse,
+    MAX_HISTORY_LIMIT,
+    SuggestionsRequest,
+    SuggestionsResponse,
+)
 from app.ai_assistant import service
+from app.ai_assistant.suggestions import suggest_for_chunk
 from app.auth.dependencies import get_current_user
 
 
 router = APIRouter(prefix="/assistant", tags=["ai-assistant"])
+
+
+@router.post("/suggestions", response_model=SuggestionsResponse)
+def create_suggestions(
+    request: SuggestionsRequest,
+    user: dict = Depends(get_current_user),
+) -> SuggestionsResponse:
+    """Questions worth asking about the paragraph the learner is on.
+
+    Separate from /messages so the panel can refresh its suggestions when the
+    learner scrolls to a new paragraph, without asking a question first. Purely
+    local (see suggestions.py): no model call, so no quota and no failure mode
+    beyond auth.
+    """
+    return SuggestionsResponse(suggested_questions=suggest_for_chunk(request.current_chunk))
+
+
+@router.get("/history", response_model=HistoryResponse)
+def get_history(
+    limit: int = 50,
+    before: float | None = None,
+    user: dict = Depends(get_current_user),
+) -> HistoryResponse:
+    """The learner's own persistent assistant conversation, newest first."""
+    bounded_limit = max(1, min(limit, MAX_HISTORY_LIMIT))
+    raw = history_store.list_messages(user["uid"], limit=bounded_limit, before=before)
+    return HistoryResponse(
+        messages=[
+            HistoryMessage(
+                id=doc["_id"],
+                role=doc["role"],
+                content=doc["content"],
+                source=doc["source"],
+                trigger=doc.get("trigger"),
+                content_id=doc.get("content_id"),
+                chunk_id=doc.get("chunk_id"),
+                session_id=doc.get("session_id"),
+                timestamp=doc["timestamp"],
+            )
+            for doc in raw
+        ]
+    )
 
 
 def _record_exchange_safely(*args, **kwargs) -> None:
@@ -100,5 +152,23 @@ def create_assistant_message(
         status="success",
         model_name=model_name,
         response=response,
+    )
+    history_store.insert_message(
+        uid=user["uid"],
+        role="user",
+        content=request.question,
+        source=request.source,
+        content_id=request.content_id,
+        chunk_id=request.current_chunk.chunk_id,
+        session_id=request.session_id,
+    )
+    history_store.insert_message(
+        uid=user["uid"],
+        role="assistant",
+        content=response.answer,
+        source=request.source,
+        content_id=request.content_id,
+        chunk_id=request.current_chunk.chunk_id,
+        session_id=request.session_id,
     )
     return response

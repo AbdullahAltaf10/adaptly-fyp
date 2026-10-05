@@ -7,14 +7,19 @@ import { INTERVENTION_TYPE_LABELS } from "./labels";
  * "didn't help this time" and "not enough information" instead of "failed"
  * or "ineffective", per the neurodiversity-aware design requirement.
  */
-export default function InterventionSection({ interventionMetrics }) {
+export default function InterventionSection({ interventionMetrics, engagementMeasured = true }) {
   const totalCount = interventionMetrics?.total_count ?? 0;
 
   if (totalCount === 0) {
+    // "On track" is a claim about engagement, so it is made only when engagement
+    // was actually measured.
     return (
       <section aria-labelledby="intervention-summary-heading">
         <h2 id="intervention-summary-heading">Support offered</h2>
-        <p>No extra support was offered during this session — you were on track throughout.</p>
+        <p>
+          No extra support was offered during this session
+          {engagementMeasured ? " — you were on track throughout." : "."}
+        </p>
       </section>
     );
   }

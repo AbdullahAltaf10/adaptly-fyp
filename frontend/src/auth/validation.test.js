@@ -68,19 +68,25 @@ describe("name and mode", () => {
     expect(validateName("x")).toBeTruthy();
   });
 
-  it("only offers modes the backend will actually grant", () => {
+  it("uses the exact mode values the backend accepts, not just internally-consistent ones", () => {
+    // This used to only check REGISTRATION_MODES against itself - "individual"
+    // passed because it was in its own list, never against what
+    // app/auth/roles.py's VALID_MODES ({"learner", "corporate"}) actually is.
+    // Every registration with the learner option sent mode=individual and the
+    // backend rejected it with 400, because nothing here ever compared
+    // against the real value.
+    const values = REGISTRATION_MODES.map((m) => m.value);
+    expect(values).toEqual(["learner", "corporate"]);
     // hr_admin is granted from an allow-list server-side and 403s otherwise,
     // so offering it here would advertise something the server refuses.
-    const values = REGISTRATION_MODES.map((m) => m.value);
-    expect(values).toContain("individual");
-    expect(values).toContain("corporate");
     expect(values).not.toContain("hr_admin");
   });
 
   it("rejects a mode that is not on the list", () => {
     expect(validateMode("hr_admin")).toBeTruthy();
     expect(validateMode("")).toBeTruthy();
-    expect(validateMode("individual")).toBeNull();
+    expect(validateMode("individual")).toBeTruthy();
+    expect(validateMode("learner")).toBeNull();
   });
 });
 

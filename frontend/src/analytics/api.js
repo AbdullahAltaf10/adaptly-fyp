@@ -88,11 +88,12 @@ export function fetchSessionAnalytics(sessionId) {
   return api
     .get(`/api/sessions/${sessionId}/analytics`)
     .then((response) => {
-      const { insight_report: insightReport, ...summary } = response.data;
+      const { insight_report: insightReport, interventions, ...summary } = response.data;
       return {
         overview: { session_status: "completed" },
         summary,
         insightReport: insightReport ?? { status: "pending", report_text: null },
+        interventions: Array.isArray(interventions) ? interventions : [],
       };
     })
     .catch((err) => {
@@ -122,4 +123,28 @@ export function requestInsightReport(sessionId) {
   return api
     .post(`/api/sessions/${sessionId}/insight-report/retry`, null, { timeout: 90_000 })
     .then((response) => response.data);
+}
+
+/**
+ * `GET /api/analytics/learning-profile` — the multi-session profile built by
+ * Module 8 (#97) and already used by Module 4 to stop offering support that
+ * has not helped this learner (#98).
+ *
+ * Until now nothing displayed it, so the learner could not see the patterns
+ * the system was acting on. Scope 6.8 promises a profile that "tracks patterns
+ * over time", and 6.1 lists it as part of what a learner profile stores.
+ *
+ * Never 404s: a learner with no completed sessions gets a contract-shaped
+ * profile with `sessions_analyzed: 0`, which the caller shows as "not yet"
+ * rather than as an error.
+ */
+export function fetchLearningProfile() {
+  return api
+    .get("/api/analytics/learning-profile")
+    .then((response) => response.data)
+    .catch((err) => {
+      const error = new Error(err.message || "Failed to load your learning profile.");
+      error.kind = "server_error";
+      throw error;
+    });
 }

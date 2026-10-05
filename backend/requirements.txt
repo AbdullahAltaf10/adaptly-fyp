@@ -21,6 +21,7 @@ certifi>=2026.6.17                # REQUIRED for MongoDB Atlas TLS on Windows.
 
 # --- Authentication ---
 firebase-admin>=7.5.0
+webauthn>=2.5.2                   # passkey sign-in (WebAuthn registration/authentication)
 
 # --- LLM (Module 8 insight reports) ---
 # Pinned >=2.0 to align with Module 4's PR #48 pin, avoiding a third

@@ -24,7 +24,7 @@
  * page every second and restart the capture effect.
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const VISIBILITY_THRESHOLDS = [0, 0.25, 0.5, 0.75, 1];
 
@@ -34,11 +34,20 @@ export function useDwell({ enabled = true } = {}) {
   const elementsRef = useRef(new Map()); // element -> chunkId
   const activeRef = useRef(null); // { chunkId, since, accumulated }
 
+  // The same fact as `activeRef.current.chunkId`, but as state. Two different
+  // consumers need it in two different shapes, and mixing them up was a real
+  // bug: the capture loop must read it at send time WITHOUT re-rendering (a
+  // render-time value in its effect dependencies would tear down the camera
+  // on every scroll), while the study page needs a value that triggers a
+  // render, so the assistant is handed the paragraph now on screen.
+  const [activeChunkId, setActiveChunkId] = useState(null);
+
   const switchTo = useCallback((chunkId) => {
     const now = Date.now();
     const active = activeRef.current;
     if (active?.chunkId === chunkId) return;
     activeRef.current = chunkId ? { chunkId, since: now, accumulated: 0 } : null;
+    setActiveChunkId(chunkId ?? null);
   }, []);
 
   const recompute = useCallback(() => {
@@ -69,6 +78,16 @@ export function useDwell({ enabled = true } = {}) {
       { threshold: VISIBILITY_THRESHOLDS }
     );
 
+    // The content viewer renders (and calls register()) regardless of
+    // whether the session has started - `enabled` here reflects Start being
+    // clicked, and this effect only runs once that happens. Elements
+    // registered earlier were stored in elementsRef but never actually
+    // observed, since register()'s own `observer?.observe(element)` was a
+    // no-op against a still-null observerRef at the time. Catch them up now.
+    elementsRef.current.forEach((_chunkId, element) => {
+      observerRef.current.observe(element);
+    });
+
     function onVisibilityChange() {
       const active = activeRef.current;
       if (!active) return;
@@ -89,6 +108,7 @@ export function useDwell({ enabled = true } = {}) {
       ratiosRef.current.clear();
       elementsRef.current.clear();
       activeRef.current = null;
+      setActiveChunkId(null);
     };
   }, [enabled, recompute]);
 
@@ -123,8 +143,15 @@ export function useDwell({ enabled = true } = {}) {
     return active.accumulated + running;
   }, []);
 
-  /** Which chunk the learner is on, for the analyze request. */
+  /**
+   * Which chunk the learner is on, as a GETTER, for the analyze request.
+   * Read at send time so it is always current without causing a render.
+   * For rendering, use `activeChunkId` below.
+   */
   const chunkId = useCallback(() => activeRef.current?.chunkId ?? null, []);
 
-  return { register, seconds, chunkId };
+  /** Read-only snapshot of every registered chunk's current visibility ratio. */
+  const visibilityRatios = useCallback(() => new Map(ratiosRef.current), []);
+
+  return { register, seconds, chunkId, activeChunkId, visibilityRatios };
 }

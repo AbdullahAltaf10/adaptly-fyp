@@ -26,6 +26,35 @@ ALLOWED_STUDY_PREFERENCE_KEYS = {
 }
 
 
+def _is_number(value) -> bool:
+    # bool is a subclass of int in Python, so True would otherwise pass as 1.
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+# What each settings value must look like, straight from
+# shared/contracts/user-profile.schema.json. The key allowlist above stops
+# unknown fields; it said nothing about VALUES, so any client could store
+# "font": "banana" or "line_spacing": "loose" - and did: the frontend saved
+# names the contract has never had. A profile that breaks its own contract
+# then breaks every consumer that trusts it, so the boundary refuses it.
+_SETTING_RULES = {
+    "font": (lambda v: v in ("default", "opendyslexic"), 'one of "default", "opendyslexic"'),
+    "line_spacing": (lambda v: _is_number(v) and 1 <= v <= 3, "a number from 1 to 3"),
+    "high_contrast": (lambda v: isinstance(v, bool), "true or false"),
+    "focus_isolation": (lambda v: isinstance(v, bool), "true or false"),
+    "preferred_content_mode": (lambda v: v in ("text", "audio", "mixed"), 'one of "text", "audio", "mixed"'),
+    "voice_responses_enabled": (lambda v: isinstance(v, bool), "true or false"),
+    "preferred_voice_speed": (lambda v: _is_number(v) and 0.5 <= v <= 2, "a number from 0.5 to 2"),
+}
+
+
+def _validate_setting_values(settings: dict) -> None:
+    for key, value in settings.items():
+        is_valid, expected = _SETTING_RULES[key]
+        if not is_valid(value):
+            raise HTTPException(status_code=400, detail=f"{key} must be {expected}")
+
+
 @router.post("/register")
 def register_profile(mode: str, role: str = None, user=Depends(get_current_user)):
     existing = db.users.find_one({"uid": user["uid"]})
@@ -71,6 +100,7 @@ def update_profile(payload: dict, user=Depends(get_current_user)):
         if not isinstance(settings, dict):
             raise HTTPException(status_code=400, detail="accessibility_settings must be an object")
         cleaned = {k: v for k, v in settings.items() if k in ALLOWED_ACCESSIBILITY_KEYS}
+        _validate_setting_values(cleaned)
         if cleaned:
             updates["accessibility_settings"] = cleaned
 
@@ -79,6 +109,7 @@ def update_profile(payload: dict, user=Depends(get_current_user)):
         if not isinstance(prefs, dict):
             raise HTTPException(status_code=400, detail="study_preferences must be an object")
         cleaned = {k: v for k, v in prefs.items() if k in ALLOWED_STUDY_PREFERENCE_KEYS}
+        _validate_setting_values(cleaned)
         if cleaned:
             updates["study_preferences"] = cleaned
 

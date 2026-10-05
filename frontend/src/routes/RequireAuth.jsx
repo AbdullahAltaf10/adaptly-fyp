@@ -13,8 +13,13 @@
  *   unverified email   -> /verify-email, except for providers that pre-verify
  *   backend unreachable-> say so, with a retry. Not a sign-in problem, and
  *                         sending them to /signin would suggest it was.
+ *   untrusted device    -> /verify-device, but ONLY when the feature is
+ *                         actually usable (Gmail configured on the backend).
+ *                         A learner must never be gated behind a code that
+ *                         can never arrive; see AuthContext's twoFactorEnabled.
  *
- * `requireVerified` is opt-out so that forgetting it fails closed.
+ * `requireVerified` and `requireDeviceTrust` are opt-out so that forgetting
+ * either fails closed.
  */
 
 import { Navigate, useLocation } from "react-router-dom";
@@ -34,8 +39,8 @@ function signedInWithPreVerifiedProvider(user) {
   return (user?.providerData ?? []).some((p) => PRE_VERIFIED_PROVIDERS.has(p?.providerId));
 }
 
-export default function RequireAuth({ children, requireVerified = true }) {
-  const { currentUser, profile, profileError, loading } = useAuth();
+export default function RequireAuth({ children, requireVerified = true, requireDeviceTrust = true }) {
+  const { currentUser, profile, profileError, loading, twoFactorEnabled, deviceTrusted } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -82,6 +87,18 @@ export default function RequireAuth({ children, requireVerified = true }) {
     !signedInWithPreVerifiedProvider(currentUser)
   ) {
     return <Navigate to="/verify-email" replace />;
+  }
+
+  if (requireDeviceTrust && twoFactorEnabled && deviceTrusted === null) {
+    return (
+      <CenteredPage>
+        <Spinner label="Checking this device..." />
+      </CenteredPage>
+    );
+  }
+
+  if (requireDeviceTrust && twoFactorEnabled && deviceTrusted === false) {
+    return <Navigate to="/verify-device" replace />;
   }
 
   return children;

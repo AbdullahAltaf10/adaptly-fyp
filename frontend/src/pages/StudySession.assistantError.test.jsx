@@ -7,6 +7,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../engagement/useEngagementCapture", () => ({
@@ -25,6 +26,7 @@ vi.mock("../engagement/useEngagementCapture", () => ({
     droppedWindows: 0,
     prediction: null,
     sessionId: "live-session-123",
+  endSessionNow: () => Promise.resolve({}),
   }),
 }));
 vi.mock("../engagement/useFacePresence", () => ({
@@ -36,7 +38,7 @@ vi.mock("../engagement/useFacePresence", () => ({
   }),
 }));
 vi.mock("../intervention/useDwell", () => ({
-  useDwell: () => ({ seconds: () => 0, register: vi.fn() }),
+  useDwell: () => ({ seconds: () => 0, register: vi.fn(), visibilityRatios: () => new Map() }),
 }));
 vi.mock("../intervention/useIntervention", () => ({
   useIntervention: () => ({
@@ -81,7 +83,9 @@ import StudySession from "./StudySession";
 
 describe("StudySession — assistant panel survives an API error", () => {
   it("shows a safe error in the panel and leaves the rest of the study screen usable", async () => {
-    render(<StudySession contentId="content-1" chunkId="chunk-1" />);
+    render(
+      <MemoryRouter><StudySession contentId="content-1" chunkId="chunk-1" /></MemoryRouter>
+    );
     fireEvent.click(screen.getByRole("button", { name: /start session/i }));
     fireEvent.click(screen.getByRole("button", { name: /ask the assistant/i }));
 

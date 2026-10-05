@@ -24,9 +24,11 @@ direction to fail in.
 
 import time
 
-# Analyze runs about every ten seconds. A state older than this describes a
-# moment the learner has already moved on from, and acting on it would be worse
-# than acting on nothing.
+# Analyze runs about once a second (a sliding 10-frame window; see
+# frontend/src/engagement/useEngagementCapture.js), so a minute without a new
+# state means the capture has stopped, not that nothing changed. A state older
+# than this describes a moment the learner has already moved on from, and
+# acting on it would be worse than acting on nothing.
 MAX_AGE_SECONDS = 60.0
 SESSION_TTL_SECONDS = 1800.0
 

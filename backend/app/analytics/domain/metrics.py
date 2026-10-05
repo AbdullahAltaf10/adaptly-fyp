@@ -599,6 +599,42 @@ def calculate_recoveries(
     return recoveries
 
 
+def observed_recovery_since(
+    engagement_events: Sequence[Mapping[str, Any]],
+    since: datetime,
+    *,
+    now: datetime | None = None,
+    config: MetricConfig = DEFAULT_CONFIG,
+) -> bool:
+    """Has this learner shown recovery (config.recovery_confirmation_samples
+    consecutive focused/recovered confirmations within
+    config.gap_tolerance_seconds) since `since`? Mid-session, no waiting for
+    session end - issue #45. Reuses _observed_recovery's own
+    confirmation-counting logic unchanged; this is a new caller, not a new
+    algorithm. calculate_recoveries (the post-session batch path) is not
+    modified.
+
+    Pure, like every other function in this module (see the module
+    docstring) - `engagement_events` is supplied by the caller
+    (app/intervention/service.py fetches them via EngagementEventRepository),
+    not read here. `since >= now` is a degenerate but real caller case
+    (clock skew) and returns False rather than raising.
+    """
+    resolved_now = now or datetime.now(timezone.utc)
+    if since >= resolved_now:
+        return False
+
+    recovered_at, _duration = _observed_recovery(
+        intervention={},  # no explicit recovery_timestamp path for a live check
+        engagement_events=engagement_events,
+        start=since,
+        limit=resolved_now,
+        competing_start=None,
+        config=config,
+    )
+    return recovered_at is not None
+
+
 def calculate_recovery_metrics(
     recovery_results: Sequence[Mapping[str, Any]],
 ) -> dict[str, int | float | None]:

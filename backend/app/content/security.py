@@ -41,6 +41,12 @@ BLOCKED_HOSTS = {
 MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024   # 5 MB of HTML is already excessive
 REQUEST_TIMEOUT_SECONDS = 10
 
+# Redirects are followed by hand (see extractors._fetch_following_redirects) so
+# every hop can be validated. Five is what browsers tolerate before giving up on
+# a chain, and far more than any real article link needs.
+MAX_REDIRECTS = 5
+REDIRECT_STATUSES = {301, 302, 303, 307, 308}
+
 
 def _is_private(ip_text: str) -> bool:
     """True for anything not routable on the public internet."""

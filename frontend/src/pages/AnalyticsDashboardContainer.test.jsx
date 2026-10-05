@@ -8,6 +8,7 @@
  */
 
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 // The container's default props point at the real API functions in
@@ -50,10 +51,12 @@ describe("AnalyticsDashboardContainer", () => {
     const fetchAnalytics = resolvedAnalytics(MOCK_SCENARIOS.NORMAL_COMPLETED_SESSION);
 
     render(
-      <AnalyticsDashboardContainer
-        fetchRecentSession={fetchRecentSession}
-        fetchAnalytics={fetchAnalytics}
-      />
+      <MemoryRouter>
+        <AnalyticsDashboardContainer
+          fetchRecentSession={fetchRecentSession}
+          fetchAnalytics={fetchAnalytics}
+        />
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("Intro to Cellular Respiration")).toBeInTheDocument();
@@ -63,10 +66,12 @@ describe("AnalyticsDashboardContainer", () => {
 
   it("shows a calm loading state before the session list resolves", () => {
     render(
-      <AnalyticsDashboardContainer
-        fetchRecentSession={() => new Promise(() => {})}
-        fetchAnalytics={resolvedAnalytics(MOCK_SCENARIOS.NORMAL_COMPLETED_SESSION)}
-      />
+      <MemoryRouter>
+        <AnalyticsDashboardContainer
+          fetchRecentSession={() => new Promise(() => {})}
+          fetchAnalytics={resolvedAnalytics(MOCK_SCENARIOS.NORMAL_COMPLETED_SESSION)}
+        />
+      </MemoryRouter>,
     );
 
     expect(screen.getByRole("status")).toHaveTextContent(/loading your session summary/i);
@@ -77,10 +82,12 @@ describe("AnalyticsDashboardContainer", () => {
     const fetchAnalytics = vi.fn();
 
     render(
-      <AnalyticsDashboardContainer
-        fetchRecentSession={fetchRecentSession}
-        fetchAnalytics={fetchAnalytics}
-      />
+      <MemoryRouter>
+        <AnalyticsDashboardContainer
+          fetchRecentSession={fetchRecentSession}
+          fetchAnalytics={fetchAnalytics}
+        />
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText(/no session summary yet/i)).toBeInTheDocument();
@@ -91,10 +98,12 @@ describe("AnalyticsDashboardContainer", () => {
 
   it("shows an error state when the session-history request fails", async () => {
     render(
-      <AnalyticsDashboardContainer
-        fetchRecentSession={rejectedRecentSession("server_error")}
-        fetchAnalytics={vi.fn()}
-      />
+      <MemoryRouter>
+        <AnalyticsDashboardContainer
+          fetchRecentSession={rejectedRecentSession("server_error")}
+          fetchAnalytics={vi.fn()}
+        />
+      </MemoryRouter>,
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/something went wrong/i);
@@ -115,11 +124,13 @@ describe("AnalyticsDashboardContainer report generation", () => {
     const requestReport = vi.fn().mockResolvedValue({ retried: true, message: null });
 
     render(
-      <AnalyticsDashboardContainer
-        fetchRecentSession={resolvedRecentSession(SESSION)}
-        fetchAnalytics={fetchAnalytics}
-        requestReport={requestReport}
-      />,
+      <MemoryRouter>
+        <AnalyticsDashboardContainer
+          fetchRecentSession={resolvedRecentSession(SESSION)}
+          fetchAnalytics={fetchAnalytics}
+          requestReport={requestReport}
+        />
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText("Written by the server.")).toBeInTheDocument();
@@ -132,14 +143,41 @@ describe("AnalyticsDashboardContainer report generation", () => {
     const requestReport = vi.fn().mockRejectedValue(new Error("down"));
 
     render(
-      <AnalyticsDashboardContainer
-        fetchRecentSession={resolvedRecentSession(SESSION)}
-        fetchAnalytics={fetchAnalytics}
-        requestReport={requestReport}
-      />,
+      <MemoryRouter>
+        <AnalyticsDashboardContainer
+          fetchRecentSession={resolvedRecentSession(SESSION)}
+          fetchAnalytics={fetchAnalytics}
+          requestReport={requestReport}
+        />
+      </MemoryRouter>,
     );
 
     expect(await screen.findByText(/not available for this session right now/)).toBeInTheDocument();
     expect(fetchAnalytics.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("AnalyticsDashboardContainer opening a named session", () => {
+  it("loads the session named in ?session= instead of the most recent one", async () => {
+    const fetchRecentSession = vi.fn();
+    const fetchAnalytics = vi.fn(() =>
+      Promise.resolve(MOCK_SCENARIOS.NORMAL_COMPLETED_SESSION)
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/analytics?session=older-session"]}>
+        <AnalyticsDashboardContainer
+          fetchRecentSession={fetchRecentSession}
+          fetchAnalytics={fetchAnalytics}
+          requestReport={vi.fn(() => Promise.resolve({ retried: false }))}
+        />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole("heading", { name: /session summary/i });
+    expect(fetchAnalytics).toHaveBeenCalledWith("older-session");
+    // The history list links here; looking up "most recent" would quietly
+    // show the wrong session.
+    expect(fetchRecentSession).not.toHaveBeenCalled();
   });
 });

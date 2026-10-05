@@ -16,12 +16,23 @@
  * they cannot open it - is the difference between waiting and duplicating.
  */
 
+import { FileText, FolderOpen, Globe, NotepadText, PlayCircle, Plus, Video } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { listContent, sortNewestFirst } from "./api";
 import { CONTENT_TYPE_LABELS, describeContentWarning } from "./warnings";
 import { Alert, Button, Card, Spinner } from "../ui";
+
+/** A quick visual anchor for scanning a list of mixed document types. */
+const CONTENT_TYPE_ICONS = {
+  pdf: FileText,
+  research_paper: FileText,
+  plain_text: NotepadText,
+  website: Globe,
+  youtube: PlayCircle,
+  uploaded_video: Video,
+};
 
 function formatDate(iso) {
   const time = Date.parse(iso ?? "");
@@ -50,21 +61,27 @@ function DocumentRow({ item }) {
   const ready = item.status === "ready" || !item.status;
   const date = formatDate(item.created_at);
   const warnings = item.warnings ?? [];
+  const TypeIcon = CONTENT_TYPE_ICONS[item.content_type] ?? FileText;
 
   return (
     <li className="border border-line rounded-md bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="m-0 text-base font-semibold break-words">
-            {item.title || "Untitled document"}
-          </h3>
-          <p className="mt-1 mb-0 text-sm text-muted">
-            {CONTENT_TYPE_LABELS[item.content_type] ?? item.content_type}
-            {typeof item.chunk_count === "number" && ` · ${item.chunk_count} sections`}
-            {date && ` · added ${date}`}
-          </p>
-          <div className="mt-2">
-            <StatusBadge status={item.status} />
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="flex items-center justify-center w-9 h-9 rounded-md bg-info-soft text-accent shrink-0 mt-0.5">
+            <TypeIcon size={18} strokeWidth={1.75} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="m-0 text-base font-semibold break-words">
+              {item.title || "Untitled document"}
+            </h3>
+            <p className="mt-1 mb-0 text-sm text-muted">
+              {CONTENT_TYPE_LABELS[item.content_type] ?? item.content_type}
+              {typeof item.chunk_count === "number" && ` · ${item.chunk_count} sections`}
+              {date && ` · added ${date}`}
+            </p>
+            <div className="mt-2">
+              <StatusBadge status={item.status} />
+            </div>
           </div>
         </div>
 
@@ -121,8 +138,9 @@ export default function LibraryPage() {
         <h1 className="m-0 text-2xl font-semibold">My documents</h1>
         <Link
           to="/library/new"
-          className="inline-flex items-center min-h-10 px-4 py-2 rounded-md border border-accent bg-accent text-on-accent font-medium hover:bg-accent-hover"
+          className="inline-flex items-center gap-1.5 min-h-10 px-4 py-2 rounded-md border border-accent bg-accent text-on-accent font-medium hover:bg-accent-hover"
         >
+          <Plus size={16} strokeWidth={2} aria-hidden="true" />
           Add a document
         </Link>
       </div>
@@ -146,9 +164,16 @@ export default function LibraryPage() {
           title="Nothing here yet"
           subtitle="Add a document and it will appear here, ready to study."
         >
-          <Link to="/library/new" className="text-accent hover:underline">
-            Add your first document
-          </Link>
+          <div className="flex flex-col items-center text-center py-6">
+            <FolderOpen size={36} strokeWidth={1.5} className="text-muted mb-3" aria-hidden="true" />
+            <Link
+              to="/library/new"
+              className="inline-flex items-center gap-1.5 text-accent hover:underline font-medium"
+            >
+              <Plus size={16} strokeWidth={2} aria-hidden="true" />
+              Add your first document
+            </Link>
+          </div>
         </Card>
       )}
 

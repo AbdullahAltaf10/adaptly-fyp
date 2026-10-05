@@ -31,6 +31,7 @@ module also means "show me Module 3" is one folder rather than four.
 from fastapi import APIRouter
 
 from app.ai_assistant.api import router as assistant_router
+from app.auth.routes import router as auth_router
 from app.content.routes import router as content_router
 from app.engagement.routes import router as engagement_router
 from app.intervention.routes import router as intervention_router
@@ -42,6 +43,9 @@ api_router = APIRouter()
 
 # Module 1 — User Profile and Access Management
 api_router.include_router(users_router)
+
+# Module 1 — device-trust 2FA and passkey sign-in
+api_router.include_router(auth_router)
 
 # Module 2 - Content Processing
 api_router.include_router(content_router)

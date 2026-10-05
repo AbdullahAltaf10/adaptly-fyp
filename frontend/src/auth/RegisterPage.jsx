@@ -17,6 +17,7 @@
  * in the dropdown would be advertising something the server refuses.
  */
 
+import { Briefcase, Lock, Mail, User, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from "firebase/auth";
@@ -48,34 +49,58 @@ export default function RegisterPage() {
   const [email, setEmail] = useState(currentUser?.email ?? "");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
-  const [mode, setMode] = useState("individual");
+  const [mode, setMode] = useState("learner");
 
-  const [errors, setErrors] = useState({});
+  // Which fields the learner has already left, so a wrong password shows up
+  // the moment they finish typing it rather than only after they submit the
+  // whole form. Nothing is marked touched on mount - an empty required field
+  // is not wrong yet, it just has not been reached.
+  const [touched, setTouched] = useState({});
   const [formError, setFormError] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  // Recomputed on every render from the live field values, not stored in
+  // state - so a message can appear or clear on the same keystroke that fixes
+  // it, without an effect chasing the values around. `touched` decides which
+  // of these are actually shown; `handleSubmit` touches everything at once so
+  // submitting still reveals every remaining problem together.
+  const liveErrors = collectErrors(
+    credentialExists
+      ? { name: validateName(name), mode: validateMode(mode) }
+      : {
+          name: validateName(name),
+          email: validateEmail(email),
+          password: validatePassword(password),
+          confirmation: validatePasswordConfirmation(password, confirmation),
+          mode: validateMode(mode),
+        }
+  );
+  const errors = Object.fromEntries(
+    Object.entries(liveErrors).filter(([field]) => touched[field])
+  );
+  const touchField = (field) => setTouched((prev) => ({ ...prev, [field]: true }));
+
   const createProfile = async (chosenMode) => {
-    // `mode` is a query parameter on this endpoint, not a body field.
-    await api.post(`/users/register?mode=${encodeURIComponent(chosenMode)}`);
+    // `mode` and `role` are query parameters on this endpoint, not body fields.
+    // The backend requires `role` whenever mode is "corporate" - self-registration
+    // can only ever produce "employee" (`hr_admin` needs a bootstrap allow-list and
+    // is not offered here), so it is never something for this form to ask about.
+    // Omitting it was a second bug: every corporate signup 400'd on "role must be
+    // one of: employee when mode is corporate", never on the mode name itself.
+    const params = new URLSearchParams({ mode: chosenMode });
+    if (chosenMode === "corporate") params.set("role", "employee");
+    await api.post(`/users/register?${params.toString()}`);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setFormError(null);
 
-    const found = collectErrors(
-      credentialExists
-        ? { name: validateName(name), mode: validateMode(mode) }
-        : {
-            name: validateName(name),
-            email: validateEmail(email),
-            password: validatePassword(password),
-            confirmation: validatePasswordConfirmation(password, confirmation),
-            mode: validateMode(mode),
-          }
-    );
-    setErrors(found);
-    if (Object.keys(found).length > 0) return;
+    // Reveal every remaining problem at once on submit, the same as before -
+    // live validation only changes *when* a message can appear (per field, as
+    // it is left), not this all-at-once behaviour on submit.
+    setTouched({ name: true, email: true, password: true, confirmation: true, mode: true });
+    if (Object.keys(liveErrors).length > 0) return;
 
     setBusy(true);
     try {
@@ -108,7 +133,12 @@ export default function RegisterPage() {
   return (
     <CenteredPage>
       <Card
-        title="Create your Adaptly account"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <UserPlus size={20} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+            Create your Adaptly account
+          </span>
+        }
         subtitle={
           credentialExists
             ? "You are signed in. Just tell us how you will be using Adaptly."
@@ -118,7 +148,16 @@ export default function RegisterPage() {
         {formError && <Alert tone="error">{formError}</Alert>}
 
         <form onSubmit={handleSubmit} noValidate>
-          <Field label="Your name" error={errors.name} required>
+          <Field
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                <User size={14} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                Your name
+              </span>
+            }
+            error={errors.name}
+            required
+          >
             {(aria) => (
               <Input
                 {...aria}
@@ -128,13 +167,23 @@ export default function RegisterPage() {
                 value={name}
                 invalid={Boolean(errors.name)}
                 onChange={(e) => setName(e.target.value)}
+                onBlur={() => touchField("name")}
               />
             )}
           </Field>
 
           {!credentialExists && (
             <>
-              <Field label="Email address" error={errors.email} required>
+              <Field
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    <Mail size={14} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                    Email address
+                  </span>
+                }
+                error={errors.email}
+                required
+              >
                 {(aria) => (
                   <Input
                     {...aria}
@@ -145,12 +194,18 @@ export default function RegisterPage() {
                     value={email}
                     invalid={Boolean(errors.email)}
                     onChange={(e) => setEmail(e.target.value)}
+                    onBlur={() => touchField("email")}
                   />
                 )}
               </Field>
 
               <Field
-                label="Password"
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    <Lock size={14} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                    Password
+                  </span>
+                }
                 error={errors.password}
                 hint="At least 8 characters. Length matters more than symbols."
                 required
@@ -165,11 +220,21 @@ export default function RegisterPage() {
                     value={password}
                     invalid={Boolean(errors.password)}
                     onChange={(e) => setPassword(e.target.value)}
+                    onBlur={() => touchField("password")}
                   />
                 )}
               </Field>
 
-              <Field label="Confirm password" error={errors.confirmation} required>
+              <Field
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    <Lock size={14} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                    Confirm password
+                  </span>
+                }
+                error={errors.confirmation}
+                required
+              >
                 {(aria) => (
                   <Input
                     {...aria}
@@ -180,6 +245,7 @@ export default function RegisterPage() {
                     value={confirmation}
                     invalid={Boolean(errors.confirmation)}
                     onChange={(e) => setConfirmation(e.target.value)}
+                    onBlur={() => touchField("confirmation")}
                   />
                 )}
               </Field>
@@ -187,7 +253,12 @@ export default function RegisterPage() {
           )}
 
           <Field
-            label="How will you use Adaptly?"
+            label={
+              <span className="inline-flex items-center gap-1.5">
+                <Briefcase size={14} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+                How will you use Adaptly?
+              </span>
+            }
             error={errors.mode}
             hint="This decides which dashboard you land on."
             required
@@ -210,6 +281,7 @@ export default function RegisterPage() {
           </Field>
 
           <Button type="submit" className="w-full" busy={busy} busyLabel="Creating your account...">
+            <UserPlus size={16} strokeWidth={1.75} aria-hidden="true" />
             {credentialExists ? "Finish setting up" : "Create account"}
           </Button>
         </form>

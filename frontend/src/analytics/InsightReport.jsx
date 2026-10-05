@@ -1,6 +1,8 @@
+import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { INSIGHT_STATUS_LABELS } from "./labels";
+import { Button } from "../ui";
 
 /**
  * The AI-written (or deterministic-fallback) session summary.
@@ -71,9 +73,11 @@ export default function InsightReport({ insightReport, onRetry, generate, sessio
 
   if (!current) {
     return (
-      <section aria-labelledby="insight-report-heading">
-        <h2 id="insight-report-heading">Session summary</h2>
-        <p>Not available.</p>
+      <section aria-labelledby="insight-report-heading" className="mb-4">
+        <h2 id="insight-report-heading" className="text-lg font-semibold mb-2">
+          Session summary
+        </h2>
+        <p className="text-muted">Not available.</p>
       </section>
     );
   }
@@ -85,54 +89,59 @@ export default function InsightReport({ insightReport, onRetry, generate, sessio
     generating || (Boolean(generate && sessionId) && status === "pending" && attempted !== sessionId);
 
   return (
-    <section aria-labelledby="insight-report-heading">
-      <h2 id="insight-report-heading">Session summary</h2>
+    <section aria-labelledby="insight-report-heading" className="mb-4">
+      <h2 id="insight-report-heading" className="flex items-center gap-1.5 text-lg font-semibold mb-2">
+        <Sparkles size={16} strokeWidth={1.75} className="text-accent shrink-0" aria-hidden="true" />
+        Session summary
+      </h2>
 
-      {busy && (
-        <p role="status" className="text-muted">
-          Writing your summary - this can take a few seconds.
-        </p>
-      )}
-
-      {!busy && status === "pending" && (
-        <p role="status">
-          {generate
-            ? "A written summary is not available for this session right now. Your session numbers above are complete."
-            : "We're preparing a written summary of this session."}
-        </p>
-      )}
-
-      {!busy && (status === "generated" || status === "fallback_generated") && (
-        <>
-          <p style={{ fontSize: "0.8rem", color: "#666", margin: "0 0 0.25rem" }}>
-            {INSIGHT_STATUS_LABELS[status]}
+      <div className="rounded-card border border-line bg-surface shadow-card p-4">
+        {busy && (
+          <p role="status" className="flex items-center gap-2 text-muted m-0">
+            <Loader2 size={14} strokeWidth={1.75} className="animate-spin shrink-0" aria-hidden="true" />
+            Writing your summary - this can take a few seconds.
           </p>
-          <p>{reportText}</p>
-          {status === "fallback_generated" && generate && (
-            <button type="button" onClick={run} className="text-accent hover:underline">
-              Try for a fuller written summary
-            </button>
-          )}
-        </>
-      )}
+        )}
 
-      {!busy && status === "failed" && (
-        <div role="status">
-          <p>
-            We couldn&apos;t prepare a written summary this time. Your session numbers
-            above are complete and unaffected.
+        {!busy && status === "pending" && (
+          <p role="status" className="text-ink m-0">
+            {generate
+              ? "A written summary is not available for this session right now. Your session numbers above are complete."
+              : "We're preparing a written summary of this session."}
           </p>
-          <button type="button" onClick={run}>
-            Try again
-          </button>
-        </div>
-      )}
+        )}
 
-      {notice && (
-        <p role="status" className="mt-2 text-sm text-muted">
-          {notice}
-        </p>
-      )}
+        {!busy && (status === "generated" || status === "fallback_generated") && (
+          <>
+            <p className="text-xs text-muted m-0 mb-1">{INSIGHT_STATUS_LABELS[status]}</p>
+            <p className="text-ink m-0 leading-relaxed">{reportText}</p>
+            {status === "fallback_generated" && generate && (
+              <Button variant="quiet" onClick={run} className="mt-2 px-0">
+                Try for a fuller written summary
+              </Button>
+            )}
+          </>
+        )}
+
+        {!busy && status === "failed" && (
+          <div role="status">
+            <p className="text-ink m-0 mb-2">
+              We couldn&apos;t prepare a written summary this time. Your session numbers
+              above are complete and unaffected.
+            </p>
+            <Button variant="secondary" onClick={run}>
+              <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" />
+              Try again
+            </Button>
+          </div>
+        )}
+
+        {notice && (
+          <p role="status" className="mt-2 text-sm text-muted">
+            {notice}
+          </p>
+        )}
+      </div>
     </section>
   );
 }

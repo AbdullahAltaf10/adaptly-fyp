@@ -9,10 +9,14 @@
  *
  * Route shape:
  *
- *   /signin  /register  /verify-email  /forgot-password    signed out
- *   /library /library/new /study /analytics /settings      signed in
+ *   /signin  /register  /verify-email  /verify-device  /forgot-password    signed out
+ *   /  /library /library/new /study /analytics /progress /settings   signed in
  *   /compliance                                            signed in, corporate
  *   /hr/compliance                                         signed in, hr_admin
+ *
+ * "/" is the dashboard home screen (`DashboardPage`), not a redirect - it used
+ * to bounce straight to /library, which meant no page ever showed a learner
+ * anything about their own progress before they picked a document.
  *
  * The signed-in routes sit behind `RequireAuth`, which also handles the states
  * between "signed out" and "ready" - no profile row yet, unverified address,
@@ -31,12 +35,15 @@ import ForgotPasswordPage from "./auth/ForgotPasswordPage";
 import RegisterPage from "./auth/RegisterPage";
 import SettingsPage from "./auth/SettingsPage";
 import SignInPage from "./auth/SignInPage";
+import VerifyDevicePage from "./auth/VerifyDevicePage";
 import VerifyEmailPage from "./auth/VerifyEmailPage";
 import AppShell from "./routes/AppShell";
 import RequireAuth from "./routes/RequireAuth";
 import AnalyticsDashboardContainer from "./pages/AnalyticsDashboardContainer";
 import ComplianceReportPage from "./pages/ComplianceReportPage";
+import DashboardPage from "./pages/DashboardPage";
 import HrComplianceReportsPage from "./pages/HrComplianceReportsPage";
+import ProgressPage from "./pages/ProgressPage";
 import LibraryPage from "./content/LibraryPage";
 import UploadPage from "./content/UploadPage";
 import StudyRoute from "./routes/StudyRoute";
@@ -110,6 +117,17 @@ export default function App() {
           }
         />
 
+        {/* Same reasoning as /verify-email: must not require the very thing
+            it exists to establish, or it would redirect to itself forever. */}
+        <Route
+          path="/verify-device"
+          element={
+            <RequireAuth requireDeviceTrust={false}>
+              <VerifyDevicePage />
+            </RequireAuth>
+          }
+        />
+
         <Route
           element={
             <RequireAuth>
@@ -117,11 +135,12 @@ export default function App() {
             </RequireAuth>
           }
         >
-          <Route path="/" element={<Navigate to="/library" replace />} />
+          <Route path="/" element={<DashboardPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/library/new" element={<UploadPage />} />
           <Route path="/study" element={<StudyRoute />} />
           <Route path="/analytics" element={<AnalyticsDashboardContainer />} />
+          <Route path="/progress" element={<ProgressPage />} />
           <Route path="/compliance" element={<ComplianceReportPage />} />
           <Route
             path="/hr/compliance"

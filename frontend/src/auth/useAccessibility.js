@@ -28,33 +28,86 @@ import { useEffect } from "react";
 export const ACCESSIBILITY_FIELDS = ["font", "line_spacing", "high_contrast", "focus_isolation"];
 
 /**
- * Named font choices rather than a free-text family.
+ * The two fonts the shared contract allows.
  *
- * A learner picking "dyslexia-friendly" should get something measurably more
- * legible, not a font name we hope is installed. These are all system stacks,
- * so nothing has to download before the text renders - a webfont that arrives
- * late is its own accessibility problem.
+ * `shared/contracts/user-profile.schema.json` says `font` is exactly
+ * `"default"` or `"opendyslexic"`, and scope 4.1 names OpenDyslexic. This file
+ * used to offer four system stacks with names the contract has never had
+ * ("sans", "serif", "mono"), so every save wrote a value the contract rejects
+ * and the font the scope promised was not offered at all.
+ *
+ * OpenDyslexic is bundled (`@fontsource/opendyslexic`, OFL) rather than loaded
+ * from a CDN, so it works offline and nothing about a learner's reading needs
+ * a third party. It is fetched only when somebody actually chooses it - see
+ * `loadFont` - so everyone else pays nothing for it, and until it arrives the
+ * stack falls back to a system font rather than showing nothing.
  */
 export const FONT_CHOICES = {
-  system: { label: "System default", stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
-  sans: { label: "Sans serif", stack: 'Verdana, Tahoma, "DejaVu Sans", sans-serif' },
-  serif: { label: "Serif", stack: 'Georgia, "Times New Roman", serif' },
-  mono: { label: "Monospace", stack: 'ui-monospace, "Cascadia Mono", Consolas, monospace' },
+  default: { label: "System default", stack: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+  opendyslexic: {
+    label: "OpenDyslexic",
+    stack: '"OpenDyslexic", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+  },
 };
 
-export const LINE_SPACING_CHOICES = {
-  compact: { label: "Compact", value: 1.4 },
-  normal: { label: "Normal", value: 1.6 },
-  relaxed: { label: "Relaxed", value: 1.9 },
-  loose: { label: "Loose", value: 2.2 },
-};
+/** Names an older build stored. Mapped rather than discarded, so nobody's choice resets. */
+const LEGACY_FONTS = { system: "default", sans: "default", serif: "default", mono: "default" };
 
+/**
+ * The contract stores line spacing as a NUMBER between 1 and 3, not a name.
+ * These are presets over that range; any number inside it is still valid.
+ */
+export const MIN_LINE_SPACING = 1;
+export const MAX_LINE_SPACING = 3;
+
+export const LINE_SPACING_CHOICES = [
+  { value: 1.3, label: "Compact" },
+  { value: 1.5, label: "Normal" },
+  { value: 1.9, label: "Relaxed" },
+  { value: 2.2, label: "Loose" },
+];
+
+/** Names an older build stored. Same reasoning as LEGACY_FONTS. */
+const LEGACY_LINE_SPACING = { compact: 1.3, normal: 1.5, relaxed: 1.9, loose: 2.2 };
+
+// 1.5 matches the default the backend writes for a new profile
+// (`users/models.py`), so an untouched profile and an unsaved one agree.
 export const DEFAULT_ACCESSIBILITY = {
-  font: "system",
-  line_spacing: "normal",
+  font: "default",
+  line_spacing: 1.5,
   high_contrast: false,
   focus_isolation: false,
 };
+
+function resolveFont(value) {
+  if (FONT_CHOICES[value]) return value;
+  return LEGACY_FONTS[value] ?? DEFAULT_ACCESSIBILITY.font;
+}
+
+function resolveLineSpacing(value) {
+  const numeric = typeof value === "string" && value in LEGACY_LINE_SPACING
+    ? LEGACY_LINE_SPACING[value]
+    : value;
+  if (typeof numeric !== "number" || !Number.isFinite(numeric)) {
+    return DEFAULT_ACCESSIBILITY.line_spacing;
+  }
+  // Clamped rather than rejected: a value outside the range is a mistake to
+  // repair, not a reason to throw the learner's whole configuration away.
+  return Math.min(MAX_LINE_SPACING, Math.max(MIN_LINE_SPACING, numeric));
+}
+
+let openDyslexicRequested = false;
+
+/** Fetch OpenDyslexic once, the first time somebody chooses it. */
+function loadFont(font) {
+  if (font !== "opendyslexic" || openDyslexicRequested) return;
+  openDyslexicRequested = true;
+  import("@fontsource/opendyslexic/latin-400.css").catch(() => {
+    // Not being able to load the font must not break reading: the stack has a
+    // system fallback. Allow another attempt on the next apply.
+    openDyslexicRequested = false;
+  });
+}
 
 /**
  * Settings are stored per profile, but the sign-in and registration screens
@@ -89,10 +142,8 @@ function storeAccessibility(settings) {
 export function resolveAccessibility(settings) {
   const merged = { ...DEFAULT_ACCESSIBILITY, ...(settings || {}) };
   return {
-    font: FONT_CHOICES[merged.font] ? merged.font : DEFAULT_ACCESSIBILITY.font,
-    line_spacing: LINE_SPACING_CHOICES[merged.line_spacing]
-      ? merged.line_spacing
-      : DEFAULT_ACCESSIBILITY.line_spacing,
+    font: resolveFont(merged.font),
+    line_spacing: resolveLineSpacing(merged.line_spacing),
     high_contrast: Boolean(merged.high_contrast),
     focus_isolation: Boolean(merged.focus_isolation),
   };
@@ -102,8 +153,9 @@ export function applyAccessibility(settings) {
   const resolved = resolveAccessibility(settings);
   const root = document.documentElement;
 
+  loadFont(resolved.font);
   root.style.setProperty("--font-sans", FONT_CHOICES[resolved.font].stack);
-  root.style.lineHeight = String(LINE_SPACING_CHOICES[resolved.line_spacing].value);
+  root.style.lineHeight = String(resolved.line_spacing);
 
   if (resolved.high_contrast) {
     root.setAttribute("data-contrast", "high");

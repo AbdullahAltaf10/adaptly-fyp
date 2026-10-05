@@ -45,6 +45,7 @@ from app.intervention.decider import (
     BREAK_SUGGESTION,
     BULLET_SUMMARY,
     REASON_FATIGUE,
+    REASON_READING_DIFFICULTY,
     REASON_STRUGGLING,
     SIMPLIFY_CONTENT,
     TIER_BROAD,
@@ -71,6 +72,8 @@ POLICY_VERSION = "v2-tiered-personalised"
 # nothing in ml/evaluation/ can justify a number here. They need tuning against
 # real sessions once a content viewer exists, and should be treated as
 # provisional until then.
+DISPLAYED_BAD_STATES = ("drifting", "struggling")
+
 DEFAULT_DWELL_LONG = 45.0
 DEFAULT_DWELL_SHORT = 15.0
 
@@ -156,6 +159,31 @@ class DefaultPolicy:
         strong = signals.raw_struggling and signals.brow_struggling
         broad = signals.raw_struggling or signals.brow_struggling
         if not broad:
+            # Independent of the engagement model entirely - the scope
+            # document itself frames re-reading detection this way ("a
+            # separate binary classifier ... independent of the engagement
+            # model"). This is the proxy version of that independence: a
+            # learner can trigger this with zero struggling/brow evidence.
+            if (
+                signals.paragraph_revisit_detected
+                and ASSISTANT_HELP_PROMPT not in signals.discouraged_types
+            ):
+                return Decision(
+                    intervention_type=ASSISTANT_HELP_PROMPT,
+                    reason_code=REASON_READING_DIFFICULTY,
+                    reason="Went back to an earlier paragraph and stayed there — offered the assistant.",
+                    tier=TIER_BROAD,
+                    chunk_id=signals.chunk_id,
+                    content_id=signals.content_id,
+                    triggering_engagement_event_id=signals.engagement_event_id,
+                )
+            return None
+
+        # Audit 2026-10-04: the raw per-window flags are the trigger, but a
+        # learner whose displayed state is focused must not receive a
+        # struggling-based response. Only the paragraph-revisit path above
+        # is independent of the displayed state.
+        if signals.state not in DISPLAYED_BAD_STATES:
             return None
 
         long_gate, short_gate = self.gates_for(signals)
@@ -199,7 +227,10 @@ class DefaultPolicy:
                 triggering_engagement_event_id=signals.engagement_event_id,
             )
 
-        # Cheapest response, so it takes the weakest evidence and no dwell gate.
+        # Audit 2026-10-04: the assistant prompt needs the same minimum dwell as
+        # the bullet summary, so a single struggling window does not trigger it.
+        if signals.dwell_seconds < short_gate:
+            return None
         return Decision(
             intervention_type=ASSISTANT_HELP_PROMPT,
             reason_code=REASON_STRUGGLING,

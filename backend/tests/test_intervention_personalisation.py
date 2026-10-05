@@ -151,7 +151,7 @@ def test_history_can_never_promote_a_learner_to_a_more_intrusive_response():
     # intrusive than the evidence alone would have chosen.
     order = {ASSISTANT_HELP_PROMPT: 0, BULLET_SUMMARY: 1, SIMPLIFY_CONTENT: 2}
     for strong in (True, False):
-        for dwell in (0, DEFAULT_DWELL_SHORT + 1, DEFAULT_DWELL_LONG + 1):
+        for dwell in (DEFAULT_DWELL_SHORT, DEFAULT_DWELL_SHORT + 1, DEFAULT_DWELL_LONG + 1):
             for discouraged in (frozenset(), {SIMPLIFY_CONTENT}, {BULLET_SUMMARY},
                                 {SIMPLIFY_CONTENT, BULLET_SUMMARY}):
                 base = policy.decide(signals(brow_struggling=strong, dwell_seconds=dwell))

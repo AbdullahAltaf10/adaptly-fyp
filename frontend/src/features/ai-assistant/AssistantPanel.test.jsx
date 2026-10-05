@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -138,5 +138,87 @@ describe("AssistantPanel", () => {
 
     await waitFor(() => expect(apiClient).toHaveBeenCalled());
     expect(apiClient.mock.calls[0][0].input_mode).toBe("typed");
+  });
+
+  it("loads persistent history on mount and renders it as prior messages", async () => {
+    const historyClient = vi.fn().mockResolvedValue([
+      { id: "1", role: "user", content: "An earlier question", source: "panel" },
+      { id: "2", role: "assistant", content: "An earlier answer", source: "panel" },
+    ]);
+    render(<AssistantPanel historyClient={historyClient} />);
+    expect(await screen.findByText("An earlier question")).toBeInTheDocument();
+    expect(screen.getByText("An earlier answer")).toBeInTheDocument();
+    expect(historyClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts with an empty conversation when history loading fails", async () => {
+    const historyClient = vi.fn().mockRejectedValue(new Error("network"));
+    render(<AssistantPanel historyClient={historyClient} />);
+    await waitFor(() => expect(historyClient).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/an earlier/i)).not.toBeInTheDocument();
+  });
+
+  it("appends a seeded turn (from the paragraph popup's 'Continue in chat') to the conversation", async () => {
+    render(
+      <AssistantPanel
+        historyClient={vi.fn().mockResolvedValue([])}
+        seedTurn={{ id: "seed-1", content: "A simpler version of the paragraph." }}
+      />
+    );
+    expect(await screen.findByText("A simpler version of the paragraph.")).toBeInTheDocument();
+  });
+
+  it("does not lose a seeded turn to a slower, later-resolving history load", async () => {
+    // The realistic race: a fresh panel mount from "Continue in chat" starts
+    // BOTH the history fetch and the seed application at once. If history
+    // resolves after the seed is applied and just overwrites `messages`
+    // wholesale, the seed would silently vanish.
+    let resolveHistory;
+    const historyClient = vi.fn(
+      () => new Promise((resolve) => { resolveHistory = resolve; })
+    );
+    render(
+      <AssistantPanel
+        historyClient={historyClient}
+        seedTurn={{ id: "seed-1", content: "A simpler version of the paragraph." }}
+      />
+    );
+    // History has not resolved yet - give the seed every chance to have
+    // (wrongly) applied early.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await act(async () => {
+      resolveHistory([{ id: "h1", role: "user", content: "An earlier question", source: "panel" }]);
+      await Promise.resolve();
+    });
+    expect(await screen.findByText("A simpler version of the paragraph.")).toBeInTheDocument();
+    expect(screen.getByText("An earlier question")).toBeInTheDocument();
+  });
+
+  it("does not re-append the same seed twice across re-renders", async () => {
+    const seedTurn = { id: "seed-1", content: "A simpler version of the paragraph." };
+    const { rerender } = render(
+      <AssistantPanel historyClient={vi.fn().mockResolvedValue([])} seedTurn={seedTurn} />
+    );
+    await screen.findByText("A simpler version of the paragraph.");
+    rerender(<AssistantPanel historyClient={vi.fn().mockResolvedValue([])} seedTurn={seedTurn} />);
+    expect(screen.getAllByText("A simpler version of the paragraph.")).toHaveLength(1);
+  });
+
+  it("appends a second, later seed distinctly from an earlier one", async () => {
+    const { rerender } = render(
+      <AssistantPanel
+        historyClient={vi.fn().mockResolvedValue([])}
+        seedTurn={{ id: "seed-1", content: "First simplified paragraph." }}
+      />
+    );
+    await screen.findByText("First simplified paragraph.");
+    rerender(
+      <AssistantPanel
+        historyClient={vi.fn().mockResolvedValue([])}
+        seedTurn={{ id: "seed-2", content: "Second simplified paragraph." }}
+      />
+    );
+    expect(await screen.findByText("Second simplified paragraph.")).toBeInTheDocument();
+    expect(screen.getByText("First simplified paragraph.")).toBeInTheDocument();
   });
 });
